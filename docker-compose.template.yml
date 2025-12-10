@@ -1,6 +1,8 @@
 # Cloudways Developer Environment - Per-Developer Services Template
 # Replace DEVELOPER with actual developer name (e.g., rahul, john)
 # Replace *_BRANCH with actual branch names
+#
+# NOTE: Ansible API is shared across all developers (shared-ansible:5000)
 
 version: '3.8'
 
@@ -35,10 +37,10 @@ services:
       - DB_PASSWORD=root
       - DB_CONNECTION=mysql
       
-      # Services
+      # Services (Ansible is shared)
       - APP_API_SERVER=http://DEVELOPER-middleware
       - APP_API_FLEXIBLE_SERVER=http://DEVELOPER-flexible
-      - APP_ANSIBLE_HOST=http://DEVELOPER-ansible:5000
+      - APP_ANSIBLE_HOST=http://shared-ansible:5000
       - APP_EVENT_SERVICE_HOST=http://DEVELOPER-events:3000
       - APP_COMM_SERVICE_HOST=http://DEVELOPER-comms
       
@@ -91,8 +93,8 @@ services:
       - DB_USER=root
       - DB_PASS=root
       
-      # Services
-      - ANSIBLE_HOST=http://DEVELOPER-ansible:5000
+      # Services (Ansible is shared)
+      - ANSIBLE_HOST=http://shared-ansible:5000
       - PLATFORM_URL=http://DEVELOPER-platform
       - EVENT_SERVICE_URL=http://DEVELOPER-events:3000
       
@@ -141,8 +143,8 @@ services:
       - REDIS_PORT=6379
       - REDIS_PREFIX=DEVELOPER:flexible:
       
-      # Services
-      - ANSIBLE_API_URL=http://DEVELOPER-ansible:5000
+      # Services (Ansible is shared)
+      - ANSIBLE_API_URL=http://shared-ansible:5000
       - PLATFORM_API_URL=http://DEVELOPER-platform
       - EVENT_SERVICE_URL=http://DEVELOPER-events:3000
       
@@ -186,8 +188,8 @@ services:
       - REDIS_PORT=6379
       - HORIZON_PREFIX=DEVELOPER_horizon:
       
-      # Services
-      - ANSIBLE_API_URL=http://DEVELOPER-ansible:5000
+      # Services (Ansible is shared)
+      - ANSIBLE_API_URL=http://shared-ansible:5000
       - MIDDLEWARE_URL=http://DEVELOPER-flexible
       
     volumes:
@@ -197,44 +199,6 @@ services:
       - cw-shared
     depends_on:
       - DEVELOPER-flexible
-
-  # ==========================================
-  # Ansible API v2 - Flask + Celery
-  # ==========================================
-  DEVELOPER-ansible:
-    build:
-      context: ./repos/ansible-api-v2
-      dockerfile: build/api/Dockerfile
-    container_name: DEVELOPER-ansible
-    restart: unless-stopped
-    environment:
-      # Git branch
-      - GIT_BRANCH=ANSIBLE_BRANCH
-      
-      # Database
-      - DB_HOST=shared-mysql
-      - DB_NAME=cw_DEVELOPER_middleware
-      - DB_USER=root
-      - DB_PASS=root
-      
-      # Redis
-      - REDIS_HOST=shared-redis
-      - REDIS_PORT=6379
-      
-      # Celery
-      - CELERY_BROKER_URL=redis://shared-redis:6379/1
-      - CELERY_RESULT_BACKEND=redis://shared-redis:6379/1
-      
-      # Environment
-      - FLASK_ENV=development
-      
-    volumes:
-      - ./repos/ansible-api-v2:/app
-      - ./keys:/root/.ssh:ro
-    ports:
-      - "ANSIBLE_PORT:5000"
-    networks:
-      - cw-shared
 
   # ==========================================
   # Event Service - Node.js
@@ -305,4 +269,3 @@ services:
       - ./keys:/root/.ssh:ro
     networks:
       - cw-shared
-

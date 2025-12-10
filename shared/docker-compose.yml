@@ -141,3 +141,81 @@ services:
       - mysql
       - postgres
 
+  # ==========================================
+  # Ansible API v2 - Shared (Flask + Celery)
+  # ==========================================
+  ansible-api:
+    build:
+      context: ../repos/ansible-api-v2
+      dockerfile: build/api/Dockerfile
+    container_name: shared-ansible
+    restart: unless-stopped
+    environment:
+      # Database (shared)
+      - DB_HOST=shared-mysql
+      - DB_NAME=cw_shared_ansible
+      - DB_USER=root
+      - DB_PASS=root
+      
+      # Redis
+      - REDIS_HOST=shared-redis
+      - REDIS_PORT=6379
+      
+      # Celery
+      - CELERY_BROKER_URL=redis://shared-redis:6379/2
+      - CELERY_RESULT_BACKEND=redis://shared-redis:6379/2
+      
+      # Environment
+      - FLASK_ENV=development
+      - ANSIBLE_MOCKING=false
+      
+    volumes:
+      - ../repos/ansible-api-v2:/app
+      - ../repos/ansible-cg-server:/playbooks/ansible-cg-server:ro
+      - ../repos/ansible-cg-server-other:/playbooks/ansible-cg-server-other:ro
+      - ../repos/ansible-cg-php-apps:/playbooks/ansible-cg-php-apps:ro
+      - ../repos/ansible-cg-php-apps-other:/playbooks/ansible-cg-php-apps-other:ro
+      - ../keys:/root/.ssh:ro
+    ports:
+      - "5000:5000"
+    networks:
+      - cw-shared
+    depends_on:
+      - mysql
+      - redis
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.ansible.rule=Host(`ansible.dev.cw.local`)"
+      - "traefik.http.services.ansible.loadbalancer.server.port=5000"
+
+  # ==========================================
+  # Ansible Celery Worker
+  # ==========================================
+  ansible-celery:
+    build:
+      context: ../repos/ansible-api-v2
+      dockerfile: build/api/Dockerfile
+    container_name: shared-ansible-celery
+    restart: unless-stopped
+    command: celery -A app worker --loglevel=info
+    environment:
+      - DB_HOST=shared-mysql
+      - DB_NAME=cw_shared_ansible
+      - DB_USER=root
+      - DB_PASS=root
+      - REDIS_HOST=shared-redis
+      - CELERY_BROKER_URL=redis://shared-redis:6379/2
+      - CELERY_RESULT_BACKEND=redis://shared-redis:6379/2
+    volumes:
+      - ../repos/ansible-api-v2:/app
+      - ../repos/ansible-cg-server:/playbooks/ansible-cg-server:ro
+      - ../repos/ansible-cg-server-other:/playbooks/ansible-cg-server-other:ro
+      - ../repos/ansible-cg-php-apps:/playbooks/ansible-cg-php-apps:ro
+      - ../repos/ansible-cg-php-apps-other:/playbooks/ansible-cg-php-apps-other:ro
+      - ../keys:/root/.ssh:ro
+    networks:
+      - cw-shared
+    depends_on:
+      - ansible-api
+      - redis
+

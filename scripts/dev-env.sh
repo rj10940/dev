@@ -50,6 +50,7 @@ get_port_offset() {
 }
 
 # Checkout branches for a developer
+# NOTE: ansible-api-v2 is shared, so not included here
 checkout_branches() {
     local dev=$1
     
@@ -57,7 +58,7 @@ checkout_branches() {
     
     export GIT_SSH_COMMAND="ssh -i $KEYS_DIR/github_deploy_key -o StrictHostKeyChecking=no"
     
-    for repo in cg-console-new cg-apiserver flexible-middleware flexible-operation-engine ansible-api-v2 cg-event-service cg-comms-service; do
+    for repo in cg-console-new cg-apiserver flexible-middleware flexible-operation-engine cg-event-service cg-comms-service; do
         if [ -d "$REPOS_DIR/$repo" ]; then
             branch=$(get_branch "$dev" "$repo")
             log_info "  $repo -> $branch"
@@ -104,24 +105,20 @@ create_databases() {
 }
 
 # Generate docker-compose file for developer
+# NOTE: Ansible is shared, not per-developer
 generate_compose() {
     local dev=$1
     local compose_file="$BASE_DIR/docker-compose.${dev}.yml"
     
     log_info "Generating docker-compose file..."
     
-    # Get branches
+    # Get branches (ansible excluded - it's shared)
     local platform_branch=$(get_branch "$dev" "cg-console-new" "main")
     local mw_branch=$(get_branch "$dev" "cg-apiserver" "main")
     local flexible_branch=$(get_branch "$dev" "flexible-middleware" "main")
     local fmoe_branch=$(get_branch "$dev" "flexible-operation-engine" "main")
-    local ansible_branch=$(get_branch "$dev" "ansible-api-v2" "master")
     local events_branch=$(get_branch "$dev" "cg-event-service" "main")
     local comms_branch=$(get_branch "$dev" "cg-comms-service" "main")
-    
-    # Calculate port offset for this developer
-    local port_offset=$(get_port_offset "$dev")
-    local ansible_port=$((5100 + port_offset))
     
     # Generate compose file from template
     sed -e "s/DEVELOPER/${dev}/g" \
@@ -129,10 +126,8 @@ generate_compose() {
         -e "s/MW_BRANCH/${mw_branch}/g" \
         -e "s/FLEXIBLE_BRANCH/${flexible_branch}/g" \
         -e "s/FMOE_BRANCH/${fmoe_branch}/g" \
-        -e "s/ANSIBLE_BRANCH/${ansible_branch}/g" \
         -e "s/EVENTS_BRANCH/${events_branch}/g" \
         -e "s/COMMS_BRANCH/${comms_branch}/g" \
-        -e "s/ANSIBLE_PORT/${ansible_port}/g" \
         "$TEMPLATE_FILE" > "$compose_file"
     
     log_success "Generated $compose_file"
@@ -170,6 +165,7 @@ cmd_create() {
         cat > "$CONFIG_DIR/${dev}.yml" << EOF
 # Developer Configuration: $dev
 # Edit branches below, then run: ./dev-env.sh create $dev
+# NOTE: ansible-api-v2 is shared across all developers (shared-ansible)
 
 developer: $dev
 
@@ -178,7 +174,6 @@ branches:
   cg-apiserver: main
   flexible-middleware: main
   flexible-operation-engine: main
-  ansible-api-v2: master
   cg-event-service: main
   cg-comms-service: main
   platformui-frontend: main

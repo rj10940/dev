@@ -5,6 +5,9 @@
 CREATE DATABASE IF NOT EXISTS `cw_template_platform` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE DATABASE IF NOT EXISTS `cw_template_middleware` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
+-- Create shared Ansible database (Ansible is shared across all developers)
+CREATE DATABASE IF NOT EXISTS `cw_shared_ansible` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
 -- Grant privileges
 GRANT ALL PRIVILEGES ON *.* TO 'root'@'%' WITH GRANT OPTION;
 FLUSH PRIVILEGES;

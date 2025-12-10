@@ -1,5 +1,6 @@
 # Developer Configuration: rahul
 # Edit branches below, then run: ./scripts/dev-env.sh create rahul
+# NOTE: ansible-api-v2 is shared across all developers
 
 developer: rahul
 email: rahul@cloudways.com
@@ -9,7 +10,6 @@ branches:
   cg-apiserver: main
   flexible-middleware: main
   flexible-operation-engine: main
-  ansible-api-v2: master
   cg-event-service: main
   cg-comms-service: main
   platformui-frontend: main

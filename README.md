@@ -241,6 +241,32 @@ flowchart TD
 
 ## Developer Environment Architecture
 
+### Shared vs Per-Developer Services
+
+| Service | Shared | Per-Developer | Notes |
+|---------|--------|---------------|-------|
+| MySQL | ✅ | - | Single instance, isolated databases per dev |
+| Redis | ✅ | - | Single instance, key prefixes per dev |
+| PostgreSQL | ✅ | - | Single instance, isolated databases per dev |
+| Traefik | ✅ | - | Routes to all developer containers |
+| **Ansible API** | ✅ | - | Shared service, all devs use same instance |
+| Ansible Celery | ✅ | - | Worker for shared Ansible |
+| Platform (cg-console-new) | - | ✅ | Each dev has own container + DB |
+| Middleware (cg-apiserver) | - | ✅ | Each dev has own container |
+| Flexible MW | - | ✅ | Each dev has own container |
+| FMOE | - | ✅ | Each dev has own worker container |
+| Event Service | - | ✅ | Each dev has own container + DB |
+| Comms Service | - | ✅ | Each dev has own container + DB |
+
+### Why Shared Ansible?
+
+- **Resource Efficiency**: Ansible + Celery workers are memory-intensive
+- **Consistent Playbooks**: All developers use the same playbook versions
+- **Stateless**: Ansible operations don't depend on developer context
+- **Simplified Management**: Playbook updates only need one place
+
+---
+
 ### Multi-Developer Setup
 
 ```mermaid
@@ -255,13 +281,14 @@ flowchart TB
             Redis[(Redis 7<br/>:6379)]
             Postgres[(PostgreSQL 15<br/>:5432)]
             Adminer[Adminer<br/>:8081]
+            Ansible[shared-ansible<br/>:5000]
+            AnsibleCelery[ansible-celery<br/>worker]
         end
 
         subgraph DevRahul["Developer: rahul"]
             RP[rahul-platform]
             RM[rahul-middleware]
             RF[rahul-flexible]
-            RA[rahul-ansible]
             RFM[rahul-fmoe]
         end
 
@@ -269,7 +296,6 @@ flowchart TB
             JP[john-platform]
             JM[john-middleware]
             JF[john-flexible]
-            JA[john-ansible]
             JFM[john-fmoe]
         end
 
@@ -297,6 +323,10 @@ flowchart TB
     RP --> Redis
     JP --> Redis
     SP --> Redis
+    
+    RM --> Ansible
+    JM --> Ansible
+    SM --> Ansible
 ```
 
 ---
@@ -306,6 +336,10 @@ flowchart TB
 ```mermaid
 flowchart LR
     subgraph MySQL["MySQL Server"]
+        subgraph SharedDBs["Shared Databases"]
+            ADB[(cw_shared_ansible)]
+        end
+        
         subgraph RahulDBs["Rahul's Databases"]
             RDB1[(cw_rahul_platform)]
             RDB2[(cw_rahul_middleware)]
@@ -315,18 +349,16 @@ flowchart LR
             JDB1[(cw_john_platform)]
             JDB2[(cw_john_middleware)]
         end
-        
-        subgraph SarahDBs["Sarah's Databases"]
-            SDB1[(cw_sarah_platform)]
-            SDB2[(cw_sarah_middleware)]
-        end
     end
     
     subgraph Redis["Redis Server"]
+        SharedKeys[shared:ansible:* keys]
         RK[rahul:* keys]
         JK[john:* keys]
-        SK[sarah:* keys]
     end
+    
+    Ansible[shared-ansible] --> ADB
+    Ansible --> SharedKeys
     
     RP[rahul-platform] --> RDB1
     RM[rahul-middleware] --> RDB2
@@ -335,6 +367,9 @@ flowchart LR
     JP[john-platform] --> JDB1
     JM[john-middleware] --> JDB2
     JP --> JK
+    
+    RM -->|API calls| Ansible
+    JM -->|API calls| Ansible
 ```
 
 ---
@@ -382,9 +417,8 @@ flowchart TB
     subgraph Network["Docker Network: cw-shared"]
         subgraph Developer["rahul's containers"]
             Platform["rahul-platform<br/>APP_API_SERVER=http://rahul-middleware"]
-            Middleware["rahul-middleware<br/>ANSIBLE_HOST=http://rahul-ansible:5000"]
+            Middleware["rahul-middleware<br/>ANSIBLE_HOST=http://shared-ansible:5000"]
             Flexible["rahul-flexible<br/>PLATFORM_API_URL=http://rahul-platform"]
-            Ansible["rahul-ansible<br/>DB_HOST=shared-mysql"]
             FMOE["rahul-fmoe<br/>MIDDLEWARE_URL=http://rahul-flexible"]
         end
 
@@ -392,6 +426,7 @@ flowchart TB
             MySQL["shared-mysql:3306"]
             Redis["shared-redis:6379"]
             Postgres["shared-postgres:5432"]
+            Ansible["shared-ansible:5000"]
         end
     end
 
@@ -411,7 +446,63 @@ flowchart TB
     Platform --> Redis
     Flexible --> Redis
     FMOE --> Redis
+    Ansible --> Redis
 ```
+
+---
+
+### Shared Ansible Architecture
+
+```mermaid
+flowchart TB
+    subgraph Developers["All Developer Containers"]
+        R_MW[rahul-middleware]
+        R_Flex[rahul-flexible]
+        R_FMOE[rahul-fmoe]
+        J_MW[john-middleware]
+        J_Flex[john-flexible]
+        S_MW[sarah-middleware]
+    end
+
+    subgraph SharedAnsible["Shared Ansible Service"]
+        API[shared-ansible<br/>Flask API :5000]
+        Celery[ansible-celery<br/>Worker]
+        
+        subgraph Playbooks["Mounted Playbooks"]
+            PS1[ansible-cg-server]
+            PS2[ansible-cg-server-other]
+            PA1[ansible-cg-php-apps]
+            PA2[ansible-cg-php-apps-other]
+        end
+    end
+
+    subgraph SharedData["Shared Data"]
+        AnsibleDB[(cw_shared_ansible<br/>MySQL)]
+        AnsibleRedis[(Redis<br/>Celery Broker)]
+    end
+
+    R_MW -->|POST /server/provision| API
+    R_Flex -->|POST /app/install| API
+    R_FMOE -->|POST /backup/create| API
+    J_MW -->|POST /server/provision| API
+    J_Flex -->|POST /app/install| API
+    S_MW -->|POST /server/provision| API
+
+    API -->|Queue Task| AnsibleRedis
+    AnsibleRedis -->|Consume| Celery
+    Celery --> PS1
+    Celery --> PS2
+    Celery --> PA1
+    Celery --> PA2
+    Celery -->|Task State| AnsibleDB
+    API -->|Read State| AnsibleDB
+```
+
+**Key Points:**
+- All developer middleware/flexible/FMOE containers call `shared-ansible:5000`
+- Ansible playbooks are mounted read-only from cloned repos
+- Celery worker processes tasks asynchronously
+- Task state stored in shared `cw_shared_ansible` database
 
 ---
 
@@ -443,15 +534,17 @@ sudo ./scripts/generate-deploy-key.sh
 
 # 3. Add the deploy key to GitHub (see output from step 2)
 
-# 4. Clone all repositories
+# 4. Clone all repositories (includes ansible playbooks)
 ./scripts/clone-repos.sh
 
-# 5. Start shared services (MySQL, Redis, PostgreSQL, Traefik)
+# 5. Start shared services (MySQL, Redis, PostgreSQL, Traefik, Ansible)
 docker compose -f shared/docker-compose.yml up -d
 
 # 6. Create your developer environment
 ./scripts/dev-env.sh create <your-name>
 ```
+
+**Note**: Shared services include the Ansible API which is used by all developers. Individual developer environments connect to `shared-ansible:5000` for all Ansible operations.
 
 ---
 
@@ -466,12 +559,20 @@ docker compose -f shared/docker-compose.yml up -d
 │   ├── rahul.yml
 │   └── john.yml
 ├── repos/                          # Cloned repositories (shared)
-│   ├── cg-console-new/
-│   ├── cg-apiserver/
-│   ├── flexible-middleware/
-│   └── ...
+│   ├── cg-console-new/             # Platform backend
+│   ├── cg-apiserver/               # Middleware
+│   ├── flexible-middleware/        # Modern API
+│   ├── flexible-operation-engine/  # Queue workers
+│   ├── ansible-api-v2/             # Ansible API (shared service)
+│   ├── ansible-cg-server/          # Server playbooks (shared)
+│   ├── ansible-cg-server-other/    # Server ops playbooks
+│   ├── ansible-cg-php-apps/        # App playbooks
+│   ├── ansible-cg-php-apps-other/  # App ops playbooks
+│   ├── cg-event-service/           # Events service
+│   ├── cg-comms-service/           # Communications service
+│   └── platformui-frontend/        # React UI
 ├── shared/                         # Shared infrastructure
-│   ├── docker-compose.yml
+│   ├── docker-compose.yml          # MySQL, Redis, Postgres, Traefik, Ansible
 │   ├── mysql-init/
 │   └── postgres-init/
 ├── scripts/                        # CLI tools
@@ -508,12 +609,12 @@ Each developer has a YAML config file in `developers/`:
 developer: rahul
 email: rahul@cloudways.com
 
+# NOTE: ansible-api-v2 is shared across all developers (shared-ansible:5000)
 branches:
   cg-console-new: feature/new-dashboard
   cg-apiserver: develop
   flexible-middleware: main
   flexible-operation-engine: main
-  ansible-api-v2: master
   cg-event-service: main
   cg-comms-service: main
 
@@ -532,10 +633,52 @@ environment:
 | Flexible MW | `http://flexible-<dev>.dev.cw.local` |
 | Traefik Dashboard | `http://DROPLET_IP:8080` |
 | Adminer (DB) | `http://DROPLET_IP:8081` |
+| Ansible API (shared) | `http://ansible.dev.cw.local` or `http://DROPLET_IP:5000` |
 
 Add to your local `/etc/hosts`:
 ```
 DROPLET_IP  rahul.dev.cw.local api-rahul.dev.cw.local flexible-rahul.dev.cw.local
+```
+
+---
+
+## Managing Shared Ansible
+
+Since Ansible is shared across all developers, playbook updates affect everyone:
+
+```bash
+# Update ansible playbooks (affects all developers)
+cd /opt/cloudways-dev/repos/ansible-cg-server
+git pull origin master
+
+cd /opt/cloudways-dev/repos/ansible-cg-php-apps
+git pull origin master
+
+# Restart ansible service to pick up changes
+docker compose -f /opt/cloudways-dev/shared/docker-compose.yml restart ansible-api ansible-celery
+```
+
+**Caution**: Coordinate with other developers before updating shared Ansible components.
+
+---
+
+## Troubleshooting
+
+### Check Shared Service Status
+```bash
+docker compose -f /opt/cloudways-dev/shared/docker-compose.yml ps
+docker logs shared-ansible
+docker logs shared-ansible-celery
+```
+
+### View Ansible Logs
+```bash
+docker logs -f shared-ansible-celery
+```
+
+### Test Ansible API
+```bash
+curl http://localhost:5000/health
 ```
 
 ---

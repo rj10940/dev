@@ -36,6 +36,11 @@ REPOS=(
     "git@github.com:cloudways-lab/cg-event-service.git|cg-event-service"
     "git@github.com:cloudways-lab/cg-comms-service.git|cg-comms-service"
     "git@github.com:cloudways-lab/platformui-frontend.git|platformui-frontend"
+    # Ansible playbook repos (needed for shared ansible service)
+    "git@github.com:cloudways-lab/ansible-cg-server.git|ansible-cg-server"
+    "git@github.com:cloudways-lab/ansible-cg-server-other.git|ansible-cg-server-other"
+    "git@github.com:cloudways-lab/ansible-cg-php-apps.git|ansible-cg-php-apps"
+    "git@github.com:cloudways-lab/ansible-cg-php-apps-other.git|ansible-cg-php-apps-other"
 )
 
 # Alternative Bitbucket repos (uncomment if needed)

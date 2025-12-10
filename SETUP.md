@@ -43,6 +43,10 @@ Repositories to add:
 - [ ] cloudways-lab/cg-event-service
 - [ ] cloudways-lab/cg-comms-service
 - [ ] cloudways-lab/platformui-frontend
+- [ ] cloudways-lab/ansible-cg-server (shared Ansible playbooks)
+- [ ] cloudways-lab/ansible-cg-server-other
+- [ ] cloudways-lab/ansible-cg-php-apps
+- [ ] cloudways-lab/ansible-cg-php-apps-other
 
 ### Option B: Organization Machine User (Recommended)
 
@@ -150,6 +154,12 @@ git clone git@github.com:cloudways-lab/ansible-api-v2.git
 git clone git@github.com:cloudways-lab/cg-event-service.git
 git clone git@github.com:cloudways-lab/cg-comms-service.git
 git clone git@github.com:cloudways-lab/platformui-frontend.git
+
+# Ansible playbooks (needed for shared Ansible service)
+git clone git@github.com:cloudways-lab/ansible-cg-server.git
+git clone git@github.com:cloudways-lab/ansible-cg-server-other.git
+git clone git@github.com:cloudways-lab/ansible-cg-php-apps.git
+git clone git@github.com:cloudways-lab/ansible-cg-php-apps-other.git
 ```
 
 ---
@@ -166,6 +176,8 @@ This starts:
 - Redis 7 (shared-redis)
 - PostgreSQL 15 (shared-postgres)
 - Traefik reverse proxy
+- Ansible API + Celery worker (shared-ansible) - shared across all developers
+- Adminer (database UI)
 
 ---
 
