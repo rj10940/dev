@@ -423,59 +423,20 @@ update_env_file() {
     log_info "Environment configured to use: ${API_BASE_URL}"
 }
 
-# Start frontend development servers
-start_frontend() {
+# Build frontend
+build_frontend() {
     local deployment_name=$1
     local repo_dir="${REPOS_DIR}/platformui-frontend"
+    local container_dir="${repo_dir}/packages/container"
     
-    log_info "Starting frontend development servers..."
-    cd "$repo_dir"
+    log_info "Building frontend application..."
+    cd "$container_dir"
     
-    # Start all micro-frontends in parallel in background
-    # Using npm run start:dev which sets REACT_APP_ENV=development
+    # Build using development environment
+    REACT_APP_ENV=development npm run build:dev
     
-    log_info "  → Starting container..."
-    cd "$repo_dir/packages/container"
-    REACT_APP_ENV=development npm run start-frontend > /tmp/ods-${deployment_name}-container.log 2>&1 &
-    echo $! > /tmp/ods-${deployment_name}-container.pid
-    
-    log_info "  → Starting flexible..."
-    cd "$repo_dir/packages/flexible"
-    npm run start:dev > /tmp/ods-${deployment_name}-flexible.log 2>&1 &
-    echo $! > /tmp/ods-${deployment_name}-flexible.pid
-    
-    log_info "  → Starting fmp-ux3..."
-    cd "$repo_dir/packages/fmp-ux3"
-    npm run start:dev > /tmp/ods-${deployment_name}-fmp.log 2>&1 &
-    echo $! > /tmp/ods-${deployment_name}-fmp.pid
-    
-    log_info "  → Starting unified-design-system..."
-    cd "$repo_dir/packages/unified-design-system"
-    npm run start:dev > /tmp/ods-${deployment_name}-unified.log 2>&1 &
-    echo $! > /tmp/ods-${deployment_name}-unified.pid
-    
-    log_info "  → Starting unified watch-types..."
-    cd "$repo_dir/packages/unified-design-system"
-    npm run watch-types > /tmp/ods-${deployment_name}-unified-watch.log 2>&1 &
-    echo $! > /tmp/ods-${deployment_name}-unified-watch.pid
-    
-    log_info "  → Starting agencyos-ux3..."
-    cd "$repo_dir/packages/agencyos-ux3"
-    npm run start:dev > /tmp/ods-${deployment_name}-agencyos.log 2>&1 &
-    echo $! > /tmp/ods-${deployment_name}-agencyos.pid
-    
-    log_info "  → Starting guests-app-ux3..."
-    cd "$repo_dir/packages/guests-app-ux3"
-    npm run start:dev > /tmp/ods-${deployment_name}-guests.log 2>&1 &
-    echo $! > /tmp/ods-${deployment_name}-guests.pid
-    
-    log_info "All development servers started (running in background)"
-    log_info "Logs available in /tmp/ods-${deployment_name}-*.log"
-    log_info "PIDs stored in /tmp/ods-${deployment_name}-*.pid"
-    
-    # Wait a moment for servers to initialize
-    log_info "Waiting for servers to initialize..."
-    sleep 10
+    log_info "Build completed successfully"
+    log_info "Build output: ${container_dir}/dist"
 }
 
 # Create deployment environment file
@@ -611,8 +572,9 @@ EOF
     update_submodules "$flexible_branch" "$fmp_branch" "$unified_branch" "$agencyos_branch" "$guests_branch"
     install_dependencies
     update_env_file "$deployment_name"
-    start_frontend "$deployment_name"
-    # Note: No Docker containers needed - dev servers are running directly
+    build_frontend "$deployment_name"
+    create_deployment_env "$deployment_name"
+    start_containers "$deployment_name"
     register_deployment "$deployment_name" "$owner" "$frontend_branch" "$auto_destroy_days" \
         "$flexible_branch" "$fmp_branch" "$unified_branch" "$agencyos_branch" "$guests_branch"
     
@@ -620,16 +582,8 @@ EOF
     log_info "=========================================="
     log_info "✅ Deployment Complete!"
     log_info "=========================================="
-    log_info "📍 Dev Servers Running:"
-    log_info "   - Container: http://localhost:8081"
-    log_info "   - Flexible: http://localhost:8082"
-    log_info "   - FMP: http://localhost:8083"
-    log_info "   - Unified: http://localhost:8080"
-    log_info "   - AgencyOS: http://localhost:8084"
-    log_info "   - Guests: http://localhost:8085"
+    log_info "📍 URL: https://${deployment_name}.${DOMAIN}"
     log_info "🔗 API: $API_BASE_URL"
-    log_info "📋 Logs: /tmp/ods-${deployment_name}-*.log"
-    log_info "🔢 PIDs: /tmp/ods-${deployment_name}-*.pid"
     log_info "🌿 Branches:"
     log_info "   - platformui-frontend: $frontend_branch"
     log_info "   - flexible-ux3: $flexible_branch"
