@@ -294,19 +294,19 @@ update_submodules() {
             # Fetch all branches
             git fetch origin
             
-            # Checkout specified branch
+            # Force checkout specified branch (overwrite any local changes from previous runs)
             if git rev-parse --verify "origin/$branch" &>/dev/null; then
-                git checkout "$branch"
-                git pull origin "$branch"
+                git checkout -f "$branch"
+                git reset --hard "origin/$branch"
                 log_info "     ✓ $submodule: $branch"
             else
                 log_warn "     ! Branch '$branch' not found for $submodule, trying master/main..."
                 if git rev-parse --verify origin/master &>/dev/null; then
-                    git checkout master
-                    git pull origin master
+                    git checkout -f master
+                    git reset --hard origin/master
                 elif git rev-parse --verify origin/main &>/dev/null; then
-                    git checkout main
-                    git pull origin main
+                    git checkout -f main
+                    git reset --hard origin/main
                 else
                     log_error "     ! Could not find suitable branch for $submodule"
                 fi
