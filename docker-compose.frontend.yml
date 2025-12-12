@@ -13,17 +13,20 @@ services:
       - DEPLOYMENT_NAME=${DEV_NAME}
       - NODE_ENV=development
       - REACT_APP_ENV=development
-    
-    volumes:
-      # Mount the entire repo so we have access to all packages
-      - ${REPO_PATH}:/app:cached
-      # Mount start script
-      - ./start-dev-servers.sh:/start-dev-servers.sh:ro
+      # Pass branch names to clone script
+      - FRONTEND_BRANCH=${FRONTEND_BRANCH:-master}
+      - FLEXIBLE_BRANCH=${FLEXIBLE_BRANCH:-master}
+      - FMP_BRANCH=${FMP_BRANCH:-master}
+      - UNIFIED_BRANCH=${UNIFIED_BRANCH:-master}
+      - AGENCYOS_BRANCH=${AGENCYOS_BRANCH:-master}
+      - GUESTS_BRANCH=${GUESTS_BRANCH:-master}
+      # GitHub token for private packages
+      - GITHUB_NPM_TOKEN=${GITHUB_NPM_TOKEN:-}
     
     working_dir: /app
     
-    # Run the start script
-    command: bash /start-dev-servers.sh
+    # Run the setup and start script
+    command: bash -c "bash /setup-deployment.sh && bash /start-dev-servers.sh"
     
     # Expose all dev server ports
     ports:
@@ -63,7 +66,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 5
-      start_period: 120s  # Dev servers take longer to start
+      start_period: 180s  # Dev servers + clone + install take time
 
 networks:
   traefik-public:

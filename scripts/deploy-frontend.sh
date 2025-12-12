@@ -435,12 +435,24 @@ create_deployment_env "$deployment_name"
 # Create deployment environment file
 create_deployment_env() {
     local deployment_name=$1
+    local frontend_branch=$2
+    local flexible_branch=$3
+    local fmp_branch=$4
+    local unified_branch=$5
+    local agencyos_branch=$6
+    local guests_branch=$7
     
     cat > "${PROJECT_ROOT}/.env.${deployment_name}" <<EOF
 DEV_NAME=${deployment_name}
 SUBDOMAIN=${deployment_name}.${DOMAIN}
 PROJECT_NAME=${deployment_name}-ods
-REPO_PATH=${REPOS_DIR}/platformui-frontend
+FRONTEND_BRANCH=${frontend_branch}
+FLEXIBLE_BRANCH=${flexible_branch}
+FMP_BRANCH=${fmp_branch}
+UNIFIED_BRANCH=${unified_branch}
+AGENCYOS_BRANCH=${agencyos_branch}
+GUESTS_BRANCH=${guests_branch}
+GITHUB_NPM_TOKEN=${GITHUB_NPM_TOKEN}
 EOF
     
     log_info "Deployment environment created: .env.${deployment_name}"
@@ -561,13 +573,13 @@ INSERT OR REPLACE INTO deployments (name, owner, status, branch_platformui)
 VALUES ('$deployment_name', '$owner', 'creating', '$frontend_branch');
 EOF
     
-    # Deployment steps
-    prepare_frontend_repo "$frontend_branch"
-    update_submodules "$flexible_branch" "$fmp_branch" "$unified_branch" "$agencyos_branch" "$guests_branch"
-    install_dependencies
-    update_env_file "$deployment_name"
-    # No build step - running dev servers!
-    create_deployment_env "$deployment_name"
+    # Deployment steps - No need to clone/install on VPS!
+    # Container will do it all internally
+    check_limits "$owner"
+    check_exists "$deployment_name"
+    
+    # Just create env and start container
+    create_deployment_env "$deployment_name" "$frontend_branch" "$flexible_branch" "$fmp_branch" "$unified_branch" "$agencyos_branch" "$guests_branch"
     start_containers "$deployment_name"
     register_deployment "$deployment_name" "$owner" "$frontend_branch" "$auto_destroy_days" \
         "$flexible_branch" "$fmp_branch" "$unified_branch" "$agencyos_branch" "$guests_branch"

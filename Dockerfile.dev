@@ -9,6 +9,7 @@ RUN apt-get update && apt-get install -y \
     git \
     wget \
     ca-certificates \
+    openssh-client \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Node.js 25
@@ -19,12 +20,14 @@ RUN curl -fsSL https://deb.nodesource.com/setup_25.x | bash - \
 # Create app directory
 WORKDIR /app
 
-# Copy package files and install dependencies
-# This will be done at runtime with mounted volume
+# Copy setup and start scripts
+COPY setup-deployment.sh /setup-deployment.sh
+COPY start-dev-servers.sh /start-dev-servers.sh
+RUN chmod +x /setup-deployment.sh /start-dev-servers.sh
 
 # Expose ports for all micro-frontends
 EXPOSE 8080 8081 8082 8083 8084 8085
 
-# Default command (will be overridden)
+# Default command (will be overridden by docker-compose)
 CMD ["bash"]
 
