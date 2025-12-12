@@ -460,7 +460,8 @@ start_containers() {
     log_info "Starting Docker containers..."
     cd "$PROJECT_ROOT"
     
-    docker-compose \
+    # Use 'docker compose' (V2) instead of 'docker-compose' (V1)
+    docker compose \
         --env-file ".env.${deployment_name}" \
         --project-name "${deployment_name}-ods" \
         -f docker-compose.frontend.yml \
