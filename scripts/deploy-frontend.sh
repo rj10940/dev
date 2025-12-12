@@ -423,21 +423,14 @@ update_env_file() {
     log_info "Environment configured to use: ${API_BASE_URL}"
 }
 
-# Build frontend
-build_frontend() {
-    local deployment_name=$1
-    local repo_dir="${REPOS_DIR}/platformui-frontend"
-    local container_dir="${repo_dir}/packages/container"
-    
-    log_info "Building frontend application..."
-    cd "$container_dir"
-    
-    # Build using development environment
-    REACT_APP_ENV=development npm run build:dev
-    
-    log_info "Build completed successfully"
-    log_info "Build output: ${container_dir}/dist"
-}
+# No build needed - we're running dev servers!
+# Just ensure dependencies are installed
+
+# Update .env files with correct API URLs
+update_env_file "$deployment_name"
+
+# Create deployment environment file
+create_deployment_env "$deployment_name"
 
 # Create deployment environment file
 create_deployment_env() {
@@ -447,7 +440,7 @@ create_deployment_env() {
 DEV_NAME=${deployment_name}
 SUBDOMAIN=${deployment_name}.${DOMAIN}
 PROJECT_NAME=${deployment_name}-ods
-REPO_PATH=${REPOS_DIR}/platformui-frontend/packages/container
+REPO_PATH=${REPOS_DIR}/platformui-frontend
 EOF
     
     log_info "Deployment environment created: .env.${deployment_name}"
@@ -573,7 +566,7 @@ EOF
     update_submodules "$flexible_branch" "$fmp_branch" "$unified_branch" "$agencyos_branch" "$guests_branch"
     install_dependencies
     update_env_file "$deployment_name"
-    build_frontend "$deployment_name"
+    # No build step - running dev servers!
     create_deployment_env "$deployment_name"
     start_containers "$deployment_name"
     register_deployment "$deployment_name" "$owner" "$frontend_branch" "$auto_destroy_days" \

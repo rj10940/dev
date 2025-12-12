@@ -1,0 +1,30 @@
+FROM ubuntu:22.04
+
+# Prevent interactive prompts
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    git \
+    wget \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Node.js 25
+RUN curl -fsSL https://deb.nodesource.com/setup_25.x | bash - \
+    && apt-get install -y nodejs \
+    && npm install -g npm@latest
+
+# Create app directory
+WORKDIR /app
+
+# Copy package files and install dependencies
+# This will be done at runtime with mounted volume
+
+# Expose ports for all micro-frontends
+EXPOSE 8080 8081 8082 8083 8084 8085
+
+# Default command (will be overridden)
+CMD ["bash"]
+
