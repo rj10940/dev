@@ -15,10 +15,10 @@ MAX_DEPLOYMENTS_TOTAL=50
 MAX_DEPLOYMENTS_PER_USER=3
 
 # API Configuration
-API_BASE_URL="https://rj8-dev-ux.cloudways.services"
+API_BASE_URL="https://api-rj8-dev.cloudways.services"
 API_V1_URL="${API_BASE_URL}/api/v1/"
 API_V2_URL="${API_BASE_URL}/api/v2/"
-CONSOLE_URL="${API_BASE_URL}/"
+CONSOLE_URL="https://rj8-dev-ux.cloudways.services/"
 
 # GitHub Token for private packages (will be set from environment or parameter)
 GITHUB_NPM_TOKEN="${GITHUB_NPM_TOKEN:-}"
@@ -405,20 +405,59 @@ EOF
     log_info "Environment configured to use: $API_BASE_URL"
 }
 
-# Build frontend
-build_frontend() {
+# Start frontend development servers
+start_frontend() {
     local deployment_name=$1
     local repo_dir="${REPOS_DIR}/platformui-frontend"
-    local container_dir="${repo_dir}/packages/container"
     
-    log_info "Building frontend application..."
-    cd "$container_dir"
+    log_info "Starting frontend development servers..."
+    cd "$repo_dir"
     
-    # Build using development environment
-    REACT_APP_ENV=development npm run build:dev
+    # Start all micro-frontends in parallel in background
+    # Using npm run start:dev which sets REACT_APP_ENV=development
     
-    log_info "Build completed successfully"
-    log_info "Build output: ${container_dir}/dist"
+    log_info "  → Starting container..."
+    cd "$repo_dir/packages/container"
+    REACT_APP_ENV=development npm run start-frontend > /tmp/ods-${deployment_name}-container.log 2>&1 &
+    echo $! > /tmp/ods-${deployment_name}-container.pid
+    
+    log_info "  → Starting flexible..."
+    cd "$repo_dir/packages/flexible"
+    npm run start:dev > /tmp/ods-${deployment_name}-flexible.log 2>&1 &
+    echo $! > /tmp/ods-${deployment_name}-flexible.pid
+    
+    log_info "  → Starting fmp-ux3..."
+    cd "$repo_dir/packages/fmp-ux3"
+    npm run start:dev > /tmp/ods-${deployment_name}-fmp.log 2>&1 &
+    echo $! > /tmp/ods-${deployment_name}-fmp.pid
+    
+    log_info "  → Starting unified-design-system..."
+    cd "$repo_dir/packages/unified-design-system"
+    npm run start:dev > /tmp/ods-${deployment_name}-unified.log 2>&1 &
+    echo $! > /tmp/ods-${deployment_name}-unified.pid
+    
+    log_info "  → Starting unified watch-types..."
+    cd "$repo_dir/packages/unified-design-system"
+    npm run watch-types > /tmp/ods-${deployment_name}-unified-watch.log 2>&1 &
+    echo $! > /tmp/ods-${deployment_name}-unified-watch.pid
+    
+    log_info "  → Starting agencyos-ux3..."
+    cd "$repo_dir/packages/agencyos-ux3"
+    npm run start:dev > /tmp/ods-${deployment_name}-agencyos.log 2>&1 &
+    echo $! > /tmp/ods-${deployment_name}-agencyos.pid
+    
+    log_info "  → Starting guests-app-ux3..."
+    cd "$repo_dir/packages/guests-app-ux3"
+    npm run start:dev > /tmp/ods-${deployment_name}-guests.log 2>&1 &
+    echo $! > /tmp/ods-${deployment_name}-guests.pid
+    
+    log_info "All development servers started (running in background)"
+    log_info "Logs available in /tmp/ods-${deployment_name}-*.log"
+    log_info "PIDs stored in /tmp/ods-${deployment_name}-*.pid"
+    
+    # Wait a moment for servers to initialize
+    log_info "Waiting for servers to initialize..."
+    sleep 10
 }
 
 # Create deployment environment file
@@ -553,7 +592,7 @@ EOF
     update_submodules "$flexible_branch" "$fmp_branch" "$unified_branch" "$agencyos_branch" "$guests_branch"
     install_dependencies
     update_env_file "$deployment_name"
-    build_frontend "$deployment_name"
+    start_frontend "$deployment_name"
     create_deployment_env "$deployment_name"
     start_containers "$deployment_name"
     register_deployment "$deployment_name" "$owner" "$frontend_branch" "$auto_destroy_days" \
