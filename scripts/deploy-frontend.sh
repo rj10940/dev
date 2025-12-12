@@ -409,9 +409,8 @@ update_env_file() {
             # Using sed to replace URLs in-place
             sed -i \
                 -e 's|https://api4-staging\.cloudways\.com|https://api-rj8-dev.cloudways.services|g' \
-                -e 's|https://newconsole4-staging\.cloudways\.com|https://rj8-dev-ux.cloudways.services|g' \
-                -e 's|https://newconsole3-staging\.cloudways\.com|https://rj8-dev-ux.cloudways.services|g' \
-                -e 's|cloudways\.com|cloudways.services|g' \
+                -e 's|https://newconsole4-staging\.cloudways\.com|https://api-rj8-dev.cloudways.services|g' \
+                -e 's|https://newconsole3-staging\.cloudways\.com|https://api-rj8-dev.cloudways.services|g' \
                 "$env_file"
             
             log_info "     ✓ Updated $package/.env.development"
