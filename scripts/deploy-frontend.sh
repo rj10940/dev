@@ -263,12 +263,7 @@ update_submodules() {
     log_info "Initializing git submodules..."
     cd "$repo_dir"
     
-    # Clean any existing submodule state
-    log_info "Cleaning submodule working directories..."
-    git submodule foreach --recursive git reset --hard HEAD 2>/dev/null || true
-    git submodule foreach --recursive git clean -fdx 2>/dev/null || true
-    
-    # Initialize and clone submodules (force to overwrite any local changes)
+    # Initialize and update submodules - force checkout to handle any conflicts
     log_info "Running git submodule update --init --recursive --force..."
     git submodule update --init --recursive --force
     
