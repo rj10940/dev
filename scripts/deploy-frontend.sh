@@ -450,10 +450,13 @@ deploy() {
     check_limits "$owner"
     check_exists "$deployment_name"
     
+    # Ensure Node.js is installed
+    ensure_nodejs
+    
     # Update deployment status
-    sqlite3 "$REGISTRY_DB" <<EOF
+    sqlite3 "$REGISTRY_DB" <<EOF 2>/dev/null
 INSERT OR REPLACE INTO deployments (name, owner, status, branch_platformui)
-VALUES ('$deployment_name', '$owner', 'creating', '$branch');
+VALUES ('$deployment_name', '$owner', 'creating', '$frontend_branch');
 EOF
     
     # Deployment steps
