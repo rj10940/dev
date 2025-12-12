@@ -39,9 +39,37 @@ log_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
+# Check and install sqlite3 if not available
+ensure_sqlite3() {
+    if ! command -v sqlite3 &> /dev/null; then
+        log_warn "sqlite3 not found. Installing..."
+        if command -v apt-get &> /dev/null; then
+            apt-get update -qq && apt-get install -y sqlite3 >/dev/null 2>&1
+            log_info "sqlite3 installed successfully"
+        elif command -v yum &> /dev/null; then
+            yum install -y sqlite >/dev/null 2>&1
+            log_info "sqlite3 installed successfully"
+        else
+            log_error "Cannot install sqlite3 automatically. Please install manually: apt-get install sqlite3"
+            log_warn "Continuing without deployment tracking..."
+            export SKIP_REGISTRY=true
+            return 1
+        fi
+    fi
+    return 0
+}
+
 # Initialize deployment registry
 init_registry() {
     mkdir -p "$DEPLOYMENTS_DIR"
+    
+    # Try to ensure sqlite3 is available
+    ensure_sqlite3 || return 0
+    
+    if [ "$SKIP_REGISTRY" = "true" ]; then
+        log_warn "Registry disabled - sqlite3 not available"
+        return 0
+    fi
     
     if [ ! -f "$REGISTRY_DB" ]; then
         log_info "Creating deployment registry..."
@@ -81,9 +109,14 @@ validate_name() {
 check_limits() {
     local owner=$1
     
+    # Skip if registry disabled
+    if [ "$SKIP_REGISTRY" = "true" ]; then
+        return 0
+    fi
+    
     # Check total deployments
     local total=$(sqlite3 "$REGISTRY_DB" \
-        "SELECT COUNT(*) FROM deployments WHERE status='active'")
+        "SELECT COUNT(*) FROM deployments WHERE status='active'" 2>/dev/null || echo "0")
     
     if [ "$total" -ge "$MAX_DEPLOYMENTS_TOTAL" ]; then
         log_error "Total deployment limit reached ($MAX_DEPLOYMENTS_TOTAL active deployments)"
@@ -92,13 +125,13 @@ check_limits() {
     
     # Check per-user limit
     local user_count=$(sqlite3 "$REGISTRY_DB" \
-        "SELECT COUNT(*) FROM deployments WHERE owner='$owner' AND status='active'")
+        "SELECT COUNT(*) FROM deployments WHERE owner='$owner' AND status='active'" 2>/dev/null || echo "0")
     
     if [ "$user_count" -ge "$MAX_DEPLOYMENTS_PER_USER" ]; then
         log_error "User limit reached: $owner has $user_count/$MAX_DEPLOYMENTS_PER_USER deployments"
         log_info "Please destroy an old deployment first:"
         sqlite3 "$REGISTRY_DB" \
-            "SELECT name, created_at FROM deployments WHERE owner='$owner' AND status='active' ORDER BY created_at"
+            "SELECT name, created_at FROM deployments WHERE owner='$owner' AND status='active' ORDER BY created_at" 2>/dev/null
         exit 1
     fi
 }
@@ -106,8 +139,14 @@ check_limits() {
 # Check if deployment exists
 check_exists() {
     local name=$1
+    
+    # Skip if registry disabled
+    if [ "$SKIP_REGISTRY" = "true" ]; then
+        return 0
+    fi
+    
     local exists=$(sqlite3 "$REGISTRY_DB" \
-        "SELECT COUNT(*) FROM deployments WHERE name='$name' AND status='active'")
+        "SELECT COUNT(*) FROM deployments WHERE name='$name' AND status='active'" 2>/dev/null || echo "0")
     
     if [ "$exists" -gt 0 ]; then
         log_error "Deployment '$name' already exists"
@@ -298,9 +337,15 @@ register_deployment() {
     local agencyos_branch=${8:-master}
     local guests_branch=${9:-master}
     
+    # Skip if registry disabled
+    if [ "$SKIP_REGISTRY" = "true" ]; then
+        log_warn "Registry disabled - deployment not tracked in database"
+        return 0
+    fi
+    
     local auto_destroy_at=""
     if [ "$auto_destroy_days" != "never" ]; then
-        auto_destroy_at=$(date -d "+${auto_destroy_days} days" '+%Y-%m-%d %H:%M:%S')
+        auto_destroy_at=$(date -d "+${auto_destroy_days} days" '+%Y-%m-%d %H:%M:%S' 2>/dev/null || date -v+${auto_destroy_days}d '+%Y-%m-%d %H:%M:%S' 2>/dev/null)
     fi
     
     # Create JSON of all branches
@@ -316,7 +361,7 @@ register_deployment() {
 EOF
     )
     
-    sqlite3 "$REGISTRY_DB" <<EOF
+    sqlite3 "$REGISTRY_DB" <<EOF 2>/dev/null
 INSERT INTO deployments (name, owner, status, branch_platformui, auto_destroy_at, url, project_name)
 VALUES (
     '$name',
@@ -329,7 +374,11 @@ VALUES (
 );
 EOF
     
-    log_info "Deployment registered in database"
+    if [ $? -eq 0 ]; then
+        log_info "Deployment registered in database"
+    else
+        log_warn "Could not register deployment in database (continuing anyway)"
+    fi
 }
 
 # Main deployment function
@@ -412,9 +461,11 @@ destroy() {
     # Remove environment file
     rm -f ".env.${deployment_name}"
     
-    # Update registry
-    sqlite3 "$REGISTRY_DB" \
-        "UPDATE deployments SET status='destroyed' WHERE name='$deployment_name'"
+    # Update registry if available
+    if [ "$SKIP_REGISTRY" != "true" ] && [ -f "$REGISTRY_DB" ]; then
+        sqlite3 "$REGISTRY_DB" \
+            "UPDATE deployments SET status='destroyed' WHERE name='$deployment_name'" 2>/dev/null || true
+    fi
     
     log_info "✅ Deployment destroyed"
 }
@@ -423,10 +474,16 @@ destroy() {
 list_deployments() {
     init_registry
     
+    if [ "$SKIP_REGISTRY" = "true" ]; then
+        log_error "Registry not available. Cannot list deployments."
+        log_info "Use 'docker ps' to see running containers"
+        return 1
+    fi
+    
     echo ""
     echo "=== Active Deployments ==="
     sqlite3 -header -column "$REGISTRY_DB" \
-        "SELECT name, owner, url, branch_platformui, created_at FROM deployments WHERE status='active' ORDER BY created_at DESC"
+        "SELECT name, owner, url, branch_platformui, created_at FROM deployments WHERE status='active' ORDER BY created_at DESC" 2>/dev/null
     echo ""
 }
 
