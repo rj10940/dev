@@ -41,11 +41,20 @@ install_package() {
     echo ""
     
     if [ ! -d "$package_dir" ]; then
-        echo "❌ Directory not found: $package_dir"
+        echo "⚠️  Directory not found: $package_dir"
+        echo "   Skipping $package_name (submodule may not be initialized)"
         return 1
     fi
     
     cd "$package_dir"
+    
+    # Check if package.json exists
+    if [ ! -f "package.json" ]; then
+        echo "⚠️  No package.json found in $package_name"
+        echo "   Skipping..."
+        cd "$CURRENT_DIR"
+        return 1
+    fi
     
     # Git operations (continue even if they fail)
     echo "→ Git operations..."
