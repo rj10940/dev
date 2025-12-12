@@ -1,6 +1,6 @@
 services:
   traefik:
-    image: traefik:v2.10
+    image: traefik:v3.6
     container_name: traefik
     restart: unless-stopped
     security_opt:
@@ -41,7 +41,7 @@ services:
     
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
-      - ./traefik-data/letsencrypt:/letsencrypt
+      - ./traefik/letsencrypt:/letsencrypt
     
     networks:
       - traefik-public
