@@ -260,8 +260,11 @@ update_submodules() {
     log_info "Initializing git submodules..."
     cd "$repo_dir"
     
-    # Initialize submodules if not already done
-    git submodule init
+    # Initialize and clone submodules
+    log_info "Running git submodule update --init --recursive..."
+    git submodule update --init --recursive
+    
+    log_info "Submodules initialized and cloned"
     
     # Update submodules to specified branches
     log_info "Updating submodules to specified branches..."
