@@ -2,7 +2,8 @@
 # Frontend Deployment Automation Script
 # Handles cloning, building, and deploying frontend with specific branches
 
-set -e
+# Note: Don't use 'set -e' because we want to continue even if some operations fail
+# (like sqlite registry operations which are optional)
 
 # Configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
