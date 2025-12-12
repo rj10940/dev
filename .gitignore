@@ -1,0 +1,39 @@
+# .gitignore for ODS Deployment System
+
+# Environment files (except template)
+.env
+.env.*
+!env.template
+
+# Deployment registry
+deployments/registry.db
+deployments/*.db
+
+# Cloned repositories
+repos/
+
+# Traefik SSL certificates
+traefik/letsencrypt/acme.json
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.bak
+*.swp
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.iml
+
+# Node modules (if testing locally)
+node_modules/
+

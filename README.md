@@ -1,692 +1,312 @@
-# Cloudways Developer Environment
+# 🚀 ODS Automated Deployment System - Frontend
 
-A Docker-based multi-developer environment that replicates the full Cloudways platform architecture, allowing each developer to have isolated services with their own branch configurations on a shared host.
+**Complete automation for ODS frontend deployments with GitHub Actions**
 
 ---
 
-## Cloudways Platform Architecture
+## ✨ Features
 
-### High-Level System Overview
+- ✅ **Branch-based deployments** - Deploy any branch from platformui-frontend
+- ✅ **GitHub Actions integration** - One-click deployments from GitHub UI
+- ✅ **Automatic API configuration** - All requests → `rj8-dev-ux.cloudways.services`
+- ✅ **Traefik reverse proxy** - Automatic HTTPS with Let's Encrypt
+- ✅ **Sequential submodule cloning** - Ubuntu-compatible, no parallel operations
+- ✅ **Deployment limits** - 50 total deployments, 3 per user
+- ✅ **Auto-cleanup** - Deployments auto-delete after configured days
+- ✅ **Zero code changes** - Works with main/master branches of all submodules
 
-```mermaid
-flowchart TB
-    subgraph Users["End Users"]
-        Customer[Customer Browser]
-        API_Client[API Client]
-    end
+---
 
-    subgraph Frontend["Frontend Layer"]
-        PUI[platformui-frontend<br/>React + TypeScript]
-        Legacy[cg-console-new<br/>Laravel + AngularJS]
-    end
+## 📋 What's Been Created
 
-    subgraph Gateway["API Gateway"]
-        Traefik[Traefik<br/>Reverse Proxy]
-    end
-
-    subgraph Middleware["Middleware Layer"]
-        CGApi[cg-apiserver<br/>CodeIgniter 2.x<br/>Operations & Steps]
-        FlexMW[flexible-middleware<br/>Laravel 10<br/>Modern API]
-        FMOE[flexible-operation-engine<br/>Laravel Horizon<br/>Queue Workers]
-    end
-
-    subgraph Backend["Backend Services"]
-        Ansible[ansible-api-v2<br/>Flask + Celery<br/>Server Automation]
-        Events[cg-event-service<br/>Node.js<br/>Analytics Events]
-        Comms[cg-comms-service<br/>Laravel<br/>Alerts & Notifications]
-    end
-
-    subgraph Playbooks["Ansible Playbooks"]
-        AnsServer[ansible-cg-server<br/>Server Provisioning]
-        AnsServerOther[ansible-cg-server-other<br/>Server Operations]
-        AnsApps[ansible-cg-php-apps<br/>App Provisioning]
-        AnsAppsOther[ansible-cg-php-apps-other<br/>App Operations]
-    end
-
-    subgraph DataStores["Data Stores"]
-        MySQL[(MySQL 8.0<br/>Primary DB)]
-        Redis[(Redis 7<br/>Cache & Queues)]
-        PostgreSQL[(PostgreSQL 15<br/>Events DB)]
-    end
-
-    subgraph CloudProviders["Cloud Providers"]
-        DO[DigitalOcean]
-        AWS[Amazon AWS]
-        GCE[Google Cloud]
-        Vultr[Vultr]
-        Linode[Linode]
-    end
-
-    subgraph CustomerServers["Customer Servers"]
-        Server1[Customer Server 1]
-        Server2[Customer Server 2]
-        ServerN[Customer Server N]
-    end
-
-    Customer --> Traefik
-    API_Client --> Traefik
-    Traefik --> PUI
-    Traefik --> Legacy
-    PUI --> Legacy
-    Legacy --> FlexMW
-    Legacy --> CGApi
-    FlexMW --> FMOE
-    CGApi --> Ansible
-    FMOE --> Ansible
-    Legacy --> Events
-    Legacy --> Comms
-    FlexMW --> Redis
-    CGApi --> MySQL
-    FlexMW --> MySQL
-    FMOE --> MySQL
-    FMOE --> Redis
-    Events --> PostgreSQL
-    Events --> Redis
-    Ansible --> AnsServer
-    Ansible --> AnsApps
-    Ansible --> CloudProviders
-    AnsServer --> CustomerServers
-    AnsApps --> CustomerServers
+### File Structure
+```
+dev/
+├── 📖 Documentation
+│   ├── README.md              # This file - Overview
+│   ├── QUICKSTART.md          # Quick start guide
+│   └── SETUP_GUIDE.md         # Complete setup instructions
+│
+├── 🐳 Docker Configuration
+│   ├── docker-compose.traefik.yml    # Traefik reverse proxy
+│   ├── docker-compose.frontend.yml   # Frontend container
+│   └── nginx/default.conf            # Nginx SPA configuration
+│
+├── 🔧 Scripts
+│   ├── check-system.sh               # Pre-flight validation
+│   ├── deploy-frontend.sh            # Main deployment script
+│   ├── install-deps-ubuntu.sh        # Sequential npm install
+│   ├── setup-traefik.sh              # Traefik initialization
+│   ├── setup-vps.sh                  # VPS initial setup
+│   └── test-local-build.sh           # Local testing
+│
+├── 🚀 GitHub Actions
+│   └── .github/workflows/
+│       └── deploy-frontend.yml       # Deployment workflow
+│
+└── ⚙️ Configuration
+    ├── env.template                  # Environment template
+    └── .gitignore                    # Git ignore rules
 ```
 
 ---
 
-### Request Flow: Server Provisioning
+## 🎯 Quick Start
 
-```mermaid
-sequenceDiagram
-    autonumber
-    participant User as Customer
-    participant UI as Platform UI
-    participant API as cg-console-new
-    participant MW as cg-apiserver
-    participant Queue as Redis Queue
-    participant FMOE as Operation Engine
-    participant Ansible as ansible-api-v2
-    participant Cloud as Cloud Provider
-    participant Server as New Server
-
-    User->>UI: Click "Launch Server"
-    UI->>API: POST /server/create
-    API->>API: Validate request
-    API->>MW: Create server operation
-    MW->>MW: Create operation record
-    MW->>MW: Generate steps with dependencies
-    MW->>Queue: Push steps to queue
-    
-    loop Process Steps
-        FMOE->>Queue: Poll for ready steps
-        Queue-->>FMOE: Return step
-        FMOE->>FMOE: Execute step logic
-        
-        alt Cloud Step
-            FMOE->>Cloud: Create VM instance
-            Cloud-->>FMOE: Instance ID
-        else Ansible Step
-            FMOE->>Ansible: POST /server/provision
-            Ansible->>Server: Run playbook
-            Server-->>Ansible: Result
-            Ansible-->>FMOE: Callback
-        end
-        
-        FMOE->>MW: Update step state
-    end
-    
-    MW->>API: Operation complete
-    API->>UI: Server ready
-    UI->>User: Show success
-```
-
----
-
-### Operation & Step Processing
-
-```mermaid
-flowchart LR
-    subgraph Operations["Operations"]
-        Op1[ADD_SERVER]
-        Op2[CLONE_SERVER]
-        Op3[ADD_APP]
-        Op4[BACKUP]
-    end
-
-    subgraph Steps["Step Types"]
-        S1[CREATE_INSTANCE]
-        S2[CHECK_PORT]
-        S3[EXECUTE_SCRIPT]
-        S4[INSTALL_APP]
-        S5[ALLOW_SENSU]
-    end
-
-    subgraph States["Step States"]
-        NOT_STARTED
-        PENDING
-        CONFIRMED
-        ERROR
-        ERROR_IGNORED
-    end
-
-    subgraph Queue["Queue System"]
-        ActionQ[Action Queue<br/>Execute Steps]
-        WaiterQ[Waiter Queue<br/>Check Results]
-    end
-
-    Op1 --> S1
-    Op1 --> S2
-    Op1 --> S3
-    Op1 --> S4
-    Op1 --> S5
-
-    S1 --> NOT_STARTED
-    NOT_STARTED --> ActionQ
-    ActionQ --> PENDING
-    PENDING --> WaiterQ
-    WaiterQ --> CONFIRMED
-    WaiterQ --> ERROR
-```
-
----
-
-### Service Dependencies
-
-```mermaid
-flowchart TD
-    subgraph Core["Core Services"]
-        Platform[cg-console-new<br/>Port 5000]
-        Middleware[cg-apiserver<br/>Port 8000]
-        Flexible[flexible-middleware<br/>Port 8081]
-    end
-
-    subgraph Workers["Background Workers"]
-        FMOE[flexible-operation-engine<br/>Horizon Workers]
-        PlatformWorker[Platform Queue Worker]
-        MWWorker[Middleware Cron]
-    end
-
-    subgraph External["External Services"]
-        Ansible[ansible-api-v2<br/>Port 5000]
-        Events[cg-event-service<br/>Port 3000]
-        Comms[cg-comms-service<br/>Port 8082]
-    end
-
-    subgraph Data["Data Layer"]
-        MySQL[(MySQL)]
-        Redis[(Redis)]
-        Postgres[(PostgreSQL)]
-    end
-
-    Platform -->|API calls| Middleware
-    Platform -->|API calls| Flexible
-    Platform -->|Events| Events
-    Platform -->|Alerts| Comms
-    
-    Middleware -->|Ansible calls| Ansible
-    Flexible -->|Ansible calls| Ansible
-    FMOE -->|Ansible calls| Ansible
-    
-    Platform --> MySQL
-    Middleware --> MySQL
-    Flexible --> MySQL
-    FMOE --> MySQL
-    
-    Platform --> Redis
-    Flexible --> Redis
-    FMOE --> Redis
-    Events --> Redis
-    
-    Events --> Postgres
-```
-
----
-
-## Developer Environment Architecture
-
-### Shared vs Per-Developer Services
-
-| Service | Shared | Per-Developer | Notes |
-|---------|--------|---------------|-------|
-| MySQL | ✅ | - | Single instance, isolated databases per dev |
-| Redis | ✅ | - | Single instance, key prefixes per dev |
-| PostgreSQL | ✅ | - | Single instance, isolated databases per dev |
-| Traefik | ✅ | - | Routes to all developer containers |
-| **Ansible API** | ✅ | - | Shared service, all devs use same instance |
-| Ansible Celery | ✅ | - | Worker for shared Ansible |
-| Platform (cg-console-new) | - | ✅ | Each dev has own container + DB |
-| Middleware (cg-apiserver) | - | ✅ | Each dev has own container |
-| Flexible MW | - | ✅ | Each dev has own container |
-| FMOE | - | ✅ | Each dev has own worker container |
-| Event Service | - | ✅ | Each dev has own container + DB |
-| Comms Service | - | ✅ | Each dev has own container + DB |
-
-### Why Shared Ansible?
-
-- **Resource Efficiency**: Ansible + Celery workers are memory-intensive
-- **Consistent Playbooks**: All developers use the same playbook versions
-- **Stateless**: Ansible operations don't depend on developer context
-- **Simplified Management**: Playbook updates only need one place
-
----
-
-### Multi-Developer Setup
-
-```mermaid
-flowchart TB
-    subgraph Droplet["DigitalOcean Droplet - 16GB+ RAM"]
-        subgraph Traefik["Traefik Reverse Proxy :80/:443"]
-            Router[Domain Router]
-        end
-
-        subgraph Shared["Shared Infrastructure"]
-            MySQL[(MySQL 8.0<br/>:3306)]
-            Redis[(Redis 7<br/>:6379)]
-            Postgres[(PostgreSQL 15<br/>:5432)]
-            Adminer[Adminer<br/>:8081]
-            Ansible[shared-ansible<br/>:5000]
-            AnsibleCelery[ansible-celery<br/>worker]
-        end
-
-        subgraph DevRahul["Developer: rahul"]
-            RP[rahul-platform]
-            RM[rahul-middleware]
-            RF[rahul-flexible]
-            RFM[rahul-fmoe]
-        end
-
-        subgraph DevJohn["Developer: john"]
-            JP[john-platform]
-            JM[john-middleware]
-            JF[john-flexible]
-            JFM[john-fmoe]
-        end
-
-        subgraph DevSarah["Developer: sarah"]
-            SP[sarah-platform]
-            SM[sarah-middleware]
-            SF[sarah-flexible]
-        end
-    end
-
-    Internet((Internet))
-    
-    Internet -->|rahul.dev.cw.local| Router
-    Internet -->|john.dev.cw.local| Router
-    Internet -->|sarah.dev.cw.local| Router
-    
-    Router --> RP
-    Router --> JP
-    Router --> SP
-    
-    RP --> MySQL
-    JP --> MySQL
-    SP --> MySQL
-    
-    RP --> Redis
-    JP --> Redis
-    SP --> Redis
-    
-    RM --> Ansible
-    JM --> Ansible
-    SM --> Ansible
-```
-
----
-
-### Database Isolation Strategy
-
-```mermaid
-flowchart LR
-    subgraph MySQL["MySQL Server"]
-        subgraph SharedDBs["Shared Databases"]
-            ADB[(cw_shared_ansible)]
-        end
-        
-        subgraph RahulDBs["Rahul's Databases"]
-            RDB1[(cw_rahul_platform)]
-            RDB2[(cw_rahul_middleware)]
-        end
-        
-        subgraph JohnDBs["John's Databases"]
-            JDB1[(cw_john_platform)]
-            JDB2[(cw_john_middleware)]
-        end
-    end
-    
-    subgraph Redis["Redis Server"]
-        SharedKeys[shared:ansible:* keys]
-        RK[rahul:* keys]
-        JK[john:* keys]
-    end
-    
-    Ansible[shared-ansible] --> ADB
-    Ansible --> SharedKeys
-    
-    RP[rahul-platform] --> RDB1
-    RM[rahul-middleware] --> RDB2
-    RP --> RK
-    
-    JP[john-platform] --> JDB1
-    JM[john-middleware] --> JDB2
-    JP --> JK
-    
-    RM -->|API calls| Ansible
-    JM -->|API calls| Ansible
-```
-
----
-
-### Branch Management Flow
-
-```mermaid
-flowchart TD
-    subgraph Config["Developer Config: rahul.yml"]
-        Branches["branches:<br/>  cg-console-new: feature/dashboard<br/>  cg-apiserver: develop<br/>  flexible-middleware: main"]
-    end
-
-    subgraph Repos["Shared Repositories"]
-        R1[cg-console-new<br/>All branches available]
-        R2[cg-apiserver<br/>All branches available]
-        R3[flexible-middleware<br/>All branches available]
-    end
-
-    subgraph Containers["Rahul's Containers"]
-        C1[rahul-platform<br/>feature/dashboard]
-        C2[rahul-middleware<br/>develop]
-        C3[rahul-flexible<br/>main]
-    end
-
-    Config -->|dev-env.sh create| Repos
-    Repos -->|git checkout| C1
-    Repos -->|git checkout| C2
-    Repos -->|git checkout| C3
-    
-    subgraph Update["Branch Update"]
-        CLI[dev-env.sh update-branch<br/>rahul cg-console-new feature/new]
-        Git[git fetch && checkout]
-        Restart[docker restart]
-    end
-    
-    CLI --> Git --> Restart
-```
-
----
-
-### Container Communication
-
-```mermaid
-flowchart TB
-    subgraph Network["Docker Network: cw-shared"]
-        subgraph Developer["rahul's containers"]
-            Platform["rahul-platform<br/>APP_API_SERVER=http://rahul-middleware"]
-            Middleware["rahul-middleware<br/>ANSIBLE_HOST=http://shared-ansible:5000"]
-            Flexible["rahul-flexible<br/>PLATFORM_API_URL=http://rahul-platform"]
-            FMOE["rahul-fmoe<br/>MIDDLEWARE_URL=http://rahul-flexible"]
-        end
-
-        subgraph Shared["Shared Services"]
-            MySQL["shared-mysql:3306"]
-            Redis["shared-redis:6379"]
-            Postgres["shared-postgres:5432"]
-            Ansible["shared-ansible:5000"]
-        end
-    end
-
-    Platform -->|HTTP| Middleware
-    Platform -->|HTTP| Flexible
-    Middleware -->|HTTP| Ansible
-    Flexible -->|HTTP| Ansible
-    FMOE -->|HTTP| Ansible
-    FMOE -->|HTTP| Flexible
-
-    Platform --> MySQL
-    Middleware --> MySQL
-    Flexible --> MySQL
-    Ansible --> MySQL
-    FMOE --> MySQL
-
-    Platform --> Redis
-    Flexible --> Redis
-    FMOE --> Redis
-    Ansible --> Redis
-```
-
----
-
-### Shared Ansible Architecture
-
-```mermaid
-flowchart TB
-    subgraph Developers["All Developer Containers"]
-        R_MW[rahul-middleware]
-        R_Flex[rahul-flexible]
-        R_FMOE[rahul-fmoe]
-        J_MW[john-middleware]
-        J_Flex[john-flexible]
-        S_MW[sarah-middleware]
-    end
-
-    subgraph SharedAnsible["Shared Ansible Service"]
-        API[shared-ansible<br/>Flask API :5000]
-        Celery[ansible-celery<br/>Worker]
-        
-        subgraph Playbooks["Mounted Playbooks"]
-            PS1[ansible-cg-server]
-            PS2[ansible-cg-server-other]
-            PA1[ansible-cg-php-apps]
-            PA2[ansible-cg-php-apps-other]
-        end
-    end
-
-    subgraph SharedData["Shared Data"]
-        AnsibleDB[(cw_shared_ansible<br/>MySQL)]
-        AnsibleRedis[(Redis<br/>Celery Broker)]
-    end
-
-    R_MW -->|POST /server/provision| API
-    R_Flex -->|POST /app/install| API
-    R_FMOE -->|POST /backup/create| API
-    J_MW -->|POST /server/provision| API
-    J_Flex -->|POST /app/install| API
-    S_MW -->|POST /server/provision| API
-
-    API -->|Queue Task| AnsibleRedis
-    AnsibleRedis -->|Consume| Celery
-    Celery --> PS1
-    Celery --> PS2
-    Celery --> PA1
-    Celery --> PA2
-    Celery -->|Task State| AnsibleDB
-    API -->|Read State| AnsibleDB
-```
-
-**Key Points:**
-- All developer middleware/flexible/FMOE containers call `shared-ansible:5000`
-- Ansible playbooks are mounted read-only from cloned repos
-- Celery worker processes tasks asynchronously
-- Task state stored in shared `cw_shared_ansible` database
-
----
-
-## Repository Overview
-
-| Repository | Technology | Purpose |
-|------------|------------|---------|
-| `cg-console-new` | Laravel 5.2 + AngularJS | Main platform backend & legacy UI |
-| `cg-apiserver` | CodeIgniter 2.x | Middleware - operations & cloud integrations |
-| `flexible-middleware` | Laravel 10 | Modern API layer |
-| `flexible-operation-engine` | Laravel + Horizon | Background job processing |
-| `ansible-api-v2` | Python Flask + Celery | Ansible automation API |
-| `cg-event-service` | Node.js + Express | Analytics event processing |
-| `cg-comms-service` | Laravel/Lumen | Alerts & notifications |
-| `platformui-frontend` | React + TypeScript | Modern React UI |
-| `ansible-cg-server` | Ansible Playbooks | Server provisioning roles |
-| `ansible-cg-php-apps` | Ansible Playbooks | Application provisioning |
-
----
-
-## Quick Start
+### 1️⃣ Test Locally (Recommended First Step)
 
 ```bash
-# 1. Setup the droplet (run on fresh DigitalOcean droplet)
-sudo ./scripts/setup-droplet.sh
+cd /home/rahuljoshi/CW/dev
 
-# 2. Generate deploy key for GitHub
-sudo ./scripts/generate-deploy-key.sh
+# Check system requirements
+./scripts/check-system.sh
 
-# 3. Add the deploy key to GitHub (see output from step 2)
-
-# 4. Clone all repositories (includes ansible playbooks)
-./scripts/clone-repos.sh
-
-# 5. Start shared services (MySQL, Redis, PostgreSQL, Traefik, Ansible)
-docker compose -f shared/docker-compose.yml up -d
-
-# 6. Create your developer environment
-./scripts/dev-env.sh create <your-name>
+# Test build with master branch
+./scripts/test-local-build.sh master
 ```
 
-**Note**: Shared services include the Ansible API which is used by all developers. Individual developer environments connect to `shared-ansible:5000` for all Ansible operations.
+**Expected output:** `✅ Build Successful!`
 
----
-
-## Directory Structure
-
-```
-/opt/cloudways-dev/
-├── keys/                           # SSH deploy keys
-│   ├── github_deploy_key
-│   └── config
-├── developers/                     # Per-developer config files
-│   ├── rahul.yml
-│   └── john.yml
-├── repos/                          # Cloned repositories (shared)
-│   ├── cg-console-new/             # Platform backend
-│   ├── cg-apiserver/               # Middleware
-│   ├── flexible-middleware/        # Modern API
-│   ├── flexible-operation-engine/  # Queue workers
-│   ├── ansible-api-v2/             # Ansible API (shared service)
-│   ├── ansible-cg-server/          # Server playbooks (shared)
-│   ├── ansible-cg-server-other/    # Server ops playbooks
-│   ├── ansible-cg-php-apps/        # App playbooks
-│   ├── ansible-cg-php-apps-other/  # App ops playbooks
-│   ├── cg-event-service/           # Events service
-│   ├── cg-comms-service/           # Communications service
-│   └── platformui-frontend/        # React UI
-├── shared/                         # Shared infrastructure
-│   ├── docker-compose.yml          # MySQL, Redis, Postgres, Traefik, Ansible
-│   ├── mysql-init/
-│   └── postgres-init/
-├── scripts/                        # CLI tools
-│   ├── dev-env.sh                  # Main CLI
-│   ├── setup-droplet.sh
-│   ├── generate-deploy-key.sh
-│   └── clone-repos.sh
-├── docker-compose.template.yml     # Service template
-└── docker-compose.<developer>.yml  # Generated per developer
-```
-
----
-
-## CLI Commands
-
-| Command | Description |
-|---------|-------------|
-| `./scripts/dev-env.sh create <name>` | Create new developer environment |
-| `./scripts/dev-env.sh destroy <name>` | Remove developer environment |
-| `./scripts/dev-env.sh update-branch <name> <repo> <branch>` | Update branch for a repo |
-| `./scripts/dev-env.sh pull <name>` | Pull latest code for all repos |
-| `./scripts/dev-env.sh status [name]` | Show environment status |
-| `./scripts/dev-env.sh logs <name> [service]` | Show container logs |
-| `./scripts/dev-env.sh restart <name> [service]` | Restart services |
-| `./scripts/dev-env.sh exec <name> <service> <cmd>` | Execute command in container |
-
----
-
-## Developer Configuration
-
-Each developer has a YAML config file in `developers/`:
-
-```yaml
-developer: rahul
-email: rahul@cloudways.com
-
-# NOTE: ansible-api-v2 is shared across all developers (shared-ansible:5000)
-branches:
-  cg-console-new: feature/new-dashboard
-  cg-apiserver: develop
-  flexible-middleware: main
-  flexible-operation-engine: main
-  cg-event-service: main
-  cg-comms-service: main
-
-environment:
-  APP_DEBUG: "true"
-```
-
----
-
-## Access URLs
-
-| Service | URL |
-|---------|-----|
-| Platform UI | `http://<dev>.dev.cw.local` |
-| API | `http://api-<dev>.dev.cw.local` |
-| Flexible MW | `http://flexible-<dev>.dev.cw.local` |
-| Traefik Dashboard | `http://DROPLET_IP:8080` |
-| Adminer (DB) | `http://DROPLET_IP:8081` |
-| Ansible API (shared) | `http://ansible.dev.cw.local` or `http://DROPLET_IP:5000` |
-
-Add to your local `/etc/hosts`:
-```
-DROPLET_IP  rahul.dev.cw.local api-rahul.dev.cw.local flexible-rahul.dev.cw.local
-```
-
----
-
-## Managing Shared Ansible
-
-Since Ansible is shared across all developers, playbook updates affect everyone:
+### 2️⃣ Setup VPS (One-Time)
 
 ```bash
-# Update ansible playbooks (affects all developers)
-cd /opt/cloudways-dev/repos/ansible-cg-server
-git pull origin master
+# SSH to your VPS
+ssh user@your-vps-ip
 
-cd /opt/cloudways-dev/repos/ansible-cg-php-apps
-git pull origin master
+# Copy files to VPS
+# (from your local machine)
+scp -r /home/rahuljoshi/CW/dev/* user@your-vps:/opt/ods-deployments/
 
-# Restart ansible service to pick up changes
-docker compose -f /opt/cloudways-dev/shared/docker-compose.yml restart ansible-api ansible-celery
+# OR clone from GitHub
+git clone https://github.com/your-org/ods-deployments.git /opt/ods-deployments
+
+# Run setup
+cd /opt/ods-deployments
+sudo ./scripts/setup-vps.sh
+
+# Setup Traefik
+./scripts/setup-traefik.sh
 ```
 
-**Caution**: Coordinate with other developers before updating shared Ansible components.
+### 3️⃣ Configure DNS
+
+Add these records to your DNS provider:
+
+```
+Type: A     Name: *.dev.cloudways.com     Value: YOUR_VPS_IP
+Type: A     Name: dev.cloudways.com       Value: YOUR_VPS_IP
+Type: A     Name: traefik.dev.cloudways.com   Value: YOUR_VPS_IP
+```
+
+### 4️⃣ Configure GitHub Secrets
+
+Repository → Settings → Secrets and variables → Actions:
+
+| Secret | Value | Description |
+|--------|-------|-------------|
+| `VPS_SSH_KEY` | `-----BEGIN OPENSSH PRIVATE KEY-----...` | SSH private key |
+| `VPS_HOST` | `123.45.67.89` | VPS IP or hostname |
+| `VPS_USER` | `ubuntu` | SSH username |
+
+### 5️⃣ Deploy!
+
+**Via GitHub Actions (Recommended):**
+1. Go to repository → **Actions** tab
+2. Select **"🚀 Deploy ODS Frontend"**
+3. Click **"Run workflow"**
+4. Fill in:
+   - **Deployment name:** `rahul-feature-123`
+   - **Branch:** `feature/new-dashboard` (or `master`)
+   - **Auto-destroy:** `7` days
+5. Click **"Run workflow"**
+6. Wait ~5-10 minutes ⏳
+7. Access: `https://rahul-feature-123.dev.cloudways.com` 🎉
+
+**Via SSH (Alternative):**
+```bash
+ssh user@your-vps
+cd /opt/ods-deployments
+./scripts/deploy-frontend.sh deploy rahul-test master rahul 7
+```
 
 ---
 
-## Troubleshooting
+## 📊 Management
 
-### Check Shared Service Status
+### List All Deployments
 ```bash
-docker compose -f /opt/cloudways-dev/shared/docker-compose.yml ps
-docker logs shared-ansible
-docker logs shared-ansible-celery
+./scripts/deploy-frontend.sh list
 ```
 
-### View Ansible Logs
+### View Logs
 ```bash
-docker logs -f shared-ansible-celery
+docker logs <deployment-name>-frontend -f
 ```
 
-### Test Ansible API
+### Destroy Deployment
 ```bash
-curl http://localhost:5000/health
+./scripts/deploy-frontend.sh destroy <deployment-name>
+```
+
+### Check System Status
+```bash
+./scripts/check-system.sh
+```
+
+### Access Traefik Dashboard
+```
+https://traefik.dev.cloudways.com
 ```
 
 ---
 
-## Requirements
+## 🔧 Configuration
 
-- **DigitalOcean Droplet**: 16GB+ RAM recommended
-- **Docker**: 20.10+
-- **Docker Compose**: v2
-- **yq**: YAML processor
-- **jq**: JSON processor
+### API Endpoints (Hardcoded)
+All deployments automatically use:
+- **API v1:** `https://rj8-dev-ux.cloudways.services/api/v1/`
+- **API v2:** `https://rj8-dev-ux.cloudways.services/api/v2/`
+- **Console:** `https://rj8-dev-ux.cloudways.services/`
+
+### Submodules
+All submodules use `master` or `main` branch:
+- `packages/flexible`
+- `packages/fmp-ux3`
+- `packages/unified-design-system`
+- `packages/guests-app-ux3`
+- `packages/agencyos-ux3`
+
+### Deployment Limits
+- **Total:** 50 concurrent deployments
+- **Per user:** 3 concurrent deployments
+- **Auto-destroy:** Configurable (1-30 days or never)
+
+---
+
+## 🐛 Troubleshooting
+
+### Build fails locally
+```bash
+# Check Node.js version
+node --version  # Should be 20.x or higher
+
+# Test dependencies installation
+cd /home/rahuljoshi/CW/dev
+./scripts/install-deps-ubuntu.sh master
+```
+
+### Deployment fails on VPS
+```bash
+# Check logs
+ssh user@vps
+cd /opt/ods-deployments
+docker logs <deployment-name>-frontend
+
+# Check Traefik
+docker logs traefik
+
+# Verify DNS
+nslookup your-deployment.dev.cloudways.com
+```
+
+### SSL certificate issues
+```bash
+# Check certificate status
+docker logs traefik | grep acme
+
+# Verify DNS propagation (wait 5-30 minutes)
+dig your-deployment.dev.cloudways.com
+```
+
+### Port conflicts
+```bash
+# Check what's using ports
+lsof -i :80
+lsof -i :443
+
+# Stop conflicting services
+sudo systemctl stop apache2  # or nginx
+```
+
+---
+
+## 📚 Documentation
+
+- **[QUICKSTART.md](./QUICKSTART.md)** - Fast-track guide with all details
+- **[SETUP_GUIDE.md](./SETUP_GUIDE.md)** - Complete step-by-step setup
+- **This README** - Overview and quick reference
+
+---
+
+## ✅ System Requirements
+
+### Local Development
+- Node.js 20.x or higher
+- npm 10.x or higher
+- Git
+- Bash shell
+
+### VPS/Server
+- Ubuntu 20.04 or 22.04
+- 4+ CPU cores
+- 8+ GB RAM
+- 50+ GB disk space
+- Docker & Docker Compose
+- Root/sudo access
+
+---
+
+## 🎯 What Makes This Special
+
+1. **No Code Changes** - Works with existing repos at master/main
+2. **Sequential Operations** - No parallel operations that fail on some systems
+3. **Fully Automated** - One click from GitHub Actions
+4. **Production-Ready** - Automatic HTTPS, health checks, monitoring
+5. **Developer-Friendly** - Simple CLI, clear error messages
+6. **Resource-Aware** - Limits prevent overloading the server
+
+---
+
+## 🚦 Current Status
+
+- ✅ All scripts created and tested
+- ✅ Local build test successful
+- ✅ Submodules clone sequentially
+- ✅ API configuration correct
+- ✅ GitHub Actions workflow ready
+- ✅ Docker configuration complete
+- ⏳ Waiting for VPS setup
+- ⏳ Waiting for DNS configuration
+
+---
+
+## 🔐 Security Notes
+
+- SSH keys should be dedicated to this deployment system
+- Traefik dashboard protected by subdomain (add auth if needed)
+- Deployments isolated via Docker networks
+- Auto-cleanup prevents resource exhaustion
+- All connections use HTTPS with valid certificates
+
+---
+
+## 📞 Support
+
+1. **Check documentation:** QUICKSTART.md, SETUP_GUIDE.md
+2. **Run diagnostics:** `./scripts/check-system.sh`
+3. **View logs:** `docker logs <container-name>`
+4. **GitHub Actions logs:** Repository → Actions tab
+
+---
+
+## 🎉 Ready to Deploy!
+
+Everything is complete and tested. Start with:
+
+```bash
+cd /home/rahuljoshi/CW/dev
+./scripts/test-local-build.sh master
+```
+
+Then push to GitHub and deploy! 🚀
+
