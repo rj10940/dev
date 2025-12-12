@@ -224,7 +224,8 @@ check_exists() {
 # Clone/update platformui-frontend repository
 prepare_frontend_repo() {
     local branch=$1
-    local repo_url="git@github.com:cloudways-lab/platformui-frontend.git"
+    local github_token=${GITHUB_TOKEN:-}
+    
     local repo_dir="${REPOS_DIR}/platformui-frontend"
     
     mkdir -p "$REPOS_DIR"
@@ -232,6 +233,17 @@ prepare_frontend_repo() {
     if [ ! -d "$repo_dir" ]; then
         log_info "Cloning platformui-frontend repository..."
         cd "$REPOS_DIR"
+        
+        if [ -n "$github_token" ]; then
+            # Use HTTPS with token
+            local repo_url="https://${github_token}@github.com/cloudways-lab/platformui-frontend.git"
+            log_info "Using HTTPS with authentication token"
+        else
+            # Try SSH (fallback)
+            local repo_url="git@github.com:cloudways-lab/platformui-frontend.git"
+            log_info "Using SSH authentication"
+        fi
+        
         git clone "$repo_url"
         cd "$repo_dir"
     else
@@ -243,6 +255,14 @@ prepare_frontend_repo() {
     log_info "Checking out branch: $branch"
     git checkout "$branch"
     git pull origin "$branch"
+    
+    # Configure git to use token for submodules if token provided
+    if [ -n "$github_token" ]; then
+        log_info "Configuring git credential helper for submodules..."
+        git config credential.helper store
+        echo "https://${github_token}:@github.com" > ~/.git-credentials
+        chmod 600 ~/.git-credentials
+    fi
     
     log_info "Repository prepared at: $repo_dir"
 }
@@ -260,11 +280,25 @@ update_submodules() {
     log_info "Initializing git submodules..."
     cd "$repo_dir"
     
+    # Configure git to use HTTPS for submodules (convert SSH to HTTPS)
+    if [ -n "${GITHUB_TOKEN:-}" ]; then
+        log_info "Configuring submodule URLs to use HTTPS with token..."
+        
+        # Update .gitmodules to use HTTPS instead of SSH
+        sed -i 's|git@github.com:|https://github.com/|g' .gitmodules
+        git submodule sync
+    fi
+    
     # Initialize and clone submodules
     log_info "Running git submodule update --init --recursive..."
-    git submodule update --init --recursive
+    log_info "(This will clone all submodule repositories - may take a few minutes)"
     
-    log_info "Submodules initialized and cloned"
+    if git submodule update --init --recursive; then
+        log_info "✅ Submodules cloned successfully"
+    else
+        log_error "Failed to clone submodules"
+        exit 1
+    fi
     
     # Update submodules to specified branches
     log_info "Updating submodules to specified branches..."
@@ -462,6 +496,7 @@ deploy() {
     local unified_branch=${7:-master}
     local agencyos_branch=${8:-master}
     local guests_branch=${9:-master}
+    local github_token=${10:-${GITHUB_TOKEN:-}}
     
     log_info "=========================================="
     log_info "Starting Frontend Deployment"
@@ -475,6 +510,11 @@ deploy() {
     log_info "  - unified-design-system: $unified_branch"
     log_info "  - agencyos-ux3: $agencyos_branch"
     log_info "  - guests-app-ux3: $guests_branch"
+    if [ -n "$github_token" ]; then
+        log_info "  - Authentication: GitHub Token ✓"
+    else
+        log_info "  - Authentication: SSH"
+    fi
     log_info ""
     
     # Validations
