@@ -1,0 +1,48 @@
+version: '3.8'
+
+services:
+  frontend:
+    container_name: ${DEV_NAME}-frontend
+    image: nginx:alpine
+    restart: unless-stopped
+    
+    volumes:
+      # Serve the built dist folder
+      - ${REPO_PATH}/dist:/usr/share/nginx/html:ro
+      # Custom nginx config for SPA
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    
+    networks:
+      - traefik-public
+    
+    labels:
+      - "traefik.enable=true"
+      
+      # HTTP Router
+      - "traefik.http.routers.${DEV_NAME}-fe.rule=Host(`${SUBDOMAIN}`)"
+      - "traefik.http.routers.${DEV_NAME}-fe.entrypoints=websecure"
+      - "traefik.http.routers.${DEV_NAME}-fe.tls.certresolver=letsencrypt"
+      
+      # Service
+      - "traefik.http.services.${DEV_NAME}-fe.loadbalancer.server.port=80"
+      
+      # Middleware for SPA routing
+      - "traefik.http.middlewares.${DEV_NAME}-spa.headers.customresponseheaders.X-Frame-Options=SAMEORIGIN"
+      - "traefik.http.middlewares.${DEV_NAME}-spa.headers.customresponseheaders.X-Content-Type-Options=nosniff"
+      - "traefik.http.routers.${DEV_NAME}-fe.middlewares=${DEV_NAME}-spa"
+      
+      # Docker network
+      - "traefik.docker.network=traefik-public"
+    
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+networks:
+  traefik-public:
+    name: traefik-public
+    external: true
+

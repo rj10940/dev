@@ -1,0 +1,205 @@
+name: 🚀 Deploy ODS Frontend
+
+on:
+  workflow_dispatch:
+    inputs:
+      deployment_name:
+        description: 'Deployment name (e.g., rahul-feature-123)'
+        required: true
+        type: string
+      
+      frontend_branch:
+        description: 'platformui-frontend branch name'
+        required: true
+        default: 'master'
+        type: string
+      
+      auto_destroy_days:
+        description: 'Auto-destroy after (days)'
+        required: true
+        default: '7'
+        type: choice
+        options:
+          - '1'
+          - '3'
+          - '7'
+          - '14'
+          - '30'
+          - 'never'
+      
+      notify_completion:
+        description: 'Send completion notification'
+        required: true
+        default: true
+        type: boolean
+
+jobs:
+  validate:
+    name: Validate Deployment Request
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 🔍 Validate deployment name
+        run: |
+          if [[ ! "${{ inputs.deployment_name }}" =~ ^[a-z0-9-]+$ ]]; then
+            echo "❌ Invalid deployment name. Use only lowercase, numbers, and hyphens."
+            exit 1
+          fi
+          
+          if [ ${#GITHUB_EVENT_INPUTS_DEPLOYMENT_NAME} -gt 50 ]; then
+            echo "❌ Deployment name too long (max 50 characters)"
+            exit 1
+          fi
+          
+          echo "✅ Deployment name is valid: ${{ inputs.deployment_name }}"
+      
+      - name: 📝 Display deployment info
+        run: |
+          echo "## 🚀 Deployment Configuration" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Deployment Name:** \`${{ inputs.deployment_name }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Branch:** \`${{ inputs.frontend_branch }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Owner:** \`${{ github.actor }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Auto-destroy:** ${{ inputs.auto_destroy_days }} days" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Expected URL:** \`https://${{ inputs.deployment_name }}.dev.cloudways.com\`" >> $GITHUB_STEP_SUMMARY
+
+  deploy:
+    name: Deploy Frontend
+    runs-on: ubuntu-latest
+    needs: validate
+    timeout-minutes: 30
+    
+    steps:
+      - name: 📥 Checkout deployment scripts
+        uses: actions/checkout@v4
+        with:
+          path: ods-deployments
+      
+      - name: 🔐 Setup SSH
+        uses: webfactory/ssh-agent@v0.8.0
+        with:
+          ssh-private-key: ${{ secrets.VPS_SSH_KEY }}
+      
+      - name: 🔑 Add VPS to known hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
+      
+      - name: 📦 Prepare deployment
+        id: prepare
+        run: |
+          echo "deployment_url=https://${{ inputs.deployment_name }}.dev.cloudways.com" >> $GITHUB_OUTPUT
+          echo "timestamp=$(date '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_OUTPUT
+      
+      - name: 📤 Copy deployment scripts to VPS
+        run: |
+          ssh ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "mkdir -p /opt/ods-deployments"
+          scp -r ods-deployments/* ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/opt/ods-deployments/
+      
+      - name: 🚀 Execute deployment on VPS
+        id: deploy
+        run: |
+          ssh ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'ENDSSH'
+            set -e
+            cd /opt/ods-deployments
+            
+            # Make scripts executable
+            chmod +x scripts/*.sh
+            
+            # Run deployment
+            ./scripts/deploy-frontend.sh deploy \
+              "${{ inputs.deployment_name }}" \
+              "${{ inputs.frontend_branch }}" \
+              "${{ github.actor }}" \
+              "${{ inputs.auto_destroy_days }}"
+          ENDSSH
+      
+      - name: ✅ Verify deployment
+        run: |
+          echo "⏳ Waiting for deployment to be ready..."
+          sleep 30
+          
+          # Check if URL is accessible (with retries)
+          for i in {1..10}; do
+            if curl -f -s -o /dev/null -w "%{http_code}" "https://${{ inputs.deployment_name }}.dev.cloudways.com" | grep -q "200\|301\|302"; then
+              echo "✅ Deployment is accessible!"
+              break
+            fi
+            
+            if [ $i -eq 10 ]; then
+              echo "⚠️  Deployment may take a few more minutes to be fully accessible"
+            else
+              echo "⏳ Attempt $i/10 - waiting 10 seconds..."
+              sleep 10
+            fi
+          done
+      
+      - name: 📊 Get deployment info
+        id: info
+        run: |
+          ssh ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'ENDSSH'
+            cd /opt/ods-deployments
+            ./scripts/deploy-frontend.sh list
+          ENDSSH
+      
+      - name: 💬 Post deployment summary
+        run: |
+          echo "## 🎉 Deployment Successful!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**🌐 URL:** https://${{ inputs.deployment_name }}.dev.cloudways.com" >> $GITHUB_STEP_SUMMARY
+          echo "**📦 Deployment:** \`${{ inputs.deployment_name }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**👤 Owner:** \`${{ github.actor }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**🌿 Branch:** \`${{ inputs.frontend_branch }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**🔗 API:** \`https://rj8-dev-ux.cloudways.services\`" >> $GITHUB_STEP_SUMMARY
+          echo "**⏰ Auto-destroy:** ${{ inputs.auto_destroy_days }} days" >> $GITHUB_STEP_SUMMARY
+          echo "**📅 Deployed:** ${{ steps.prepare.outputs.timestamp }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🎯 Quick Links" >> $GITHUB_STEP_SUMMARY
+          echo "- [Open Frontend](https://${{ inputs.deployment_name }}.dev.cloudways.com)" >> $GITHUB_STEP_SUMMARY
+          echo "- [Traefik Dashboard](https://traefik.dev.cloudways.com)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📝 Next Steps" >> $GITHUB_STEP_SUMMARY
+          echo "1. Test your features at the deployed URL" >> $GITHUB_STEP_SUMMARY
+          echo "2. Check browser console for any errors" >> $GITHUB_STEP_SUMMARY
+          echo "3. Verify API calls to rj8-dev-ux.cloudways.services" >> $GITHUB_STEP_SUMMARY
+      
+      - name: 📧 Send notification (optional)
+        if: inputs.notify_completion == true
+        run: |
+          # This would integrate with your notification system
+          echo "Deployment notification would be sent here"
+          echo "URL: https://${{ inputs.deployment_name }}.dev.cloudways.com"
+          echo "Owner: ${{ github.actor }}"
+
+  on-failure:
+    name: Handle Deployment Failure
+    runs-on: ubuntu-latest
+    needs: deploy
+    if: failure()
+    
+    steps:
+      - name: 🔍 Collect failure logs
+        run: |
+          echo "## ❌ Deployment Failed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Deployment:** \`${{ inputs.deployment_name }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Branch:** \`${{ inputs.frontend_branch }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Owner:** \`${{ github.actor }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Please check the workflow logs for details." >> $GITHUB_STEP_SUMMARY
+      
+      - name: 🧹 Cleanup failed deployment
+        continue-on-error: true
+        uses: webfactory/ssh-agent@v0.8.0
+        with:
+          ssh-private-key: ${{ secrets.VPS_SSH_KEY }}
+      
+      - name: 🗑️ Remove failed containers
+        continue-on-error: true
+        run: |
+          ssh ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'ENDSSH'
+            cd /opt/ods-deployments
+            ./scripts/deploy-frontend.sh destroy "${{ inputs.deployment_name }}" || true
+          ENDSSH
+
