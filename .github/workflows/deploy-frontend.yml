@@ -116,12 +116,12 @@ jobs:
       - name: 🔐 Setup SSH
         uses: webfactory/ssh-agent@v0.8.0
         with:
-          ssh-private-key: ${{ secrets.VPS_SSH_KEY }}
+          ssh-private-key: ${{ secrets.DO_VPS_SSH_KEY }}
       
       - name: 🔑 Add VPS to known hosts
         run: |
           mkdir -p ~/.ssh
-          ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
+          ssh-keyscan -H ${{ secrets.DO_VPS_HOST }} >> ~/.ssh/known_hosts
       
       - name: 📦 Prepare deployment
         id: prepare
@@ -131,13 +131,13 @@ jobs:
       
       - name: 📤 Copy deployment scripts to VPS
         run: |
-          ssh ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "mkdir -p /opt/ods-deployments"
-          scp -r ods-deployments/* ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/opt/ods-deployments/
+          ssh ${{ secrets.DO_VPS_USER }}@${{ secrets.DO_VPS_HOST }} "mkdir -p /opt/ods-deployments"
+          scp -r ods-deployments/* ${{ secrets.DO_VPS_USER }}@${{ secrets.DO_VPS_HOST }}:/opt/ods-deployments/
       
       - name: 🚀 Execute deployment on VPS
         id: deploy
         run: |
-          ssh ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'ENDSSH'
+          ssh ${{ secrets.DO_VPS_USER }}@${{ secrets.DO_VPS_HOST }} << 'ENDSSH'
             set -e
             cd /opt/ods-deployments
             
@@ -180,7 +180,7 @@ jobs:
       - name: 📊 Get deployment info
         id: info
         run: |
-          ssh ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'ENDSSH'
+          ssh ${{ secrets.DO_VPS_USER }}@${{ secrets.DO_VPS_HOST }} << 'ENDSSH'
             cd /opt/ods-deployments
             ./scripts/deploy-frontend.sh list
           ENDSSH
@@ -235,12 +235,12 @@ jobs:
         continue-on-error: true
         uses: webfactory/ssh-agent@v0.8.0
         with:
-          ssh-private-key: ${{ secrets.VPS_SSH_KEY }}
+          ssh-private-key: ${{ secrets.DO_VPS_SSH_KEY }}
       
       - name: 🗑️ Remove failed containers
         continue-on-error: true
         run: |
-          ssh ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'ENDSSH'
+          ssh ${{ secrets.DO_VPS_USER }}@${{ secrets.DO_VPS_HOST }} << 'ENDSSH'
             cd /opt/ods-deployments
             ./scripts/deploy-frontend.sh destroy "${{ inputs.deployment_name }}" || true
           ENDSSH
