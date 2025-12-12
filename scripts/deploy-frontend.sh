@@ -61,36 +61,66 @@ ensure_sqlite3() {
 
 # Check and install Node.js if not available
 ensure_nodejs() {
-    if ! command -v node &> /dev/null; then
-        log_warn "Node.js not found. Installing Node.js 20.x..."
-        if command -v apt-get &> /dev/null; then
-            # Install Node.js 20.x from NodeSource
-            curl -fsSL https://deb.nodesource.com/setup_20.x | bash - >/dev/null 2>&1
-            apt-get install -y nodejs >/dev/null 2>&1
-            log_info "Node.js installed successfully"
+    local required_version=25
+    
+    # Check if Node.js exists
+    if command -v node &> /dev/null; then
+        local current_version=$(node -v | cut -d'v' -f2 | cut -d'.' -f1)
+        if [ "$current_version" -ge "$required_version" ]; then
+            log_info "Node.js version: $(node -v) ✓"
+            log_info "npm version: $(npm -v)"
+            return 0
         else
-            log_error "Cannot install Node.js automatically."
-            log_error "Please install Node.js 20+ manually:"
-            log_error "  curl -fsSL https://deb.nodesource.com/setup_20.x | bash -"
-            log_error "  apt-get install -y nodejs"
-            exit 1
+            log_warn "Node.js version $current_version found, but v${required_version}+ required. Upgrading..."
         fi
+    else
+        log_warn "Node.js not found. Installing Node.js v${required_version}..."
     fi
     
-    # Check Node.js version
-    local node_version=$(node -v | cut -d'v' -f2 | cut -d'.' -f1)
-    if [ "$node_version" -lt 18 ]; then
-        log_warn "Node.js version is $node_version, but 20+ is recommended"
+    # Install Node.js v25 (or latest)
+    if command -v apt-get &> /dev/null; then
+        log_info "Installing Node.js from NodeSource..."
+        
+        # Remove old Node.js if exists
+        apt-get remove -y nodejs npm >/dev/null 2>&1 || true
+        
+        # Install Node.js v25 from NodeSource
+        # Note: If v25 setup script doesn't exist yet, try current instead
+        if curl -fsSL https://deb.nodesource.com/setup_25.x 2>/dev/null | bash - >/dev/null 2>&1; then
+            log_info "Installing Node.js v25..."
+        else
+            log_warn "Node.js v25 setup not available, trying current version..."
+            curl -fsSL https://deb.nodesource.com/setup_current.x | bash - >/dev/null 2>&1
+        fi
+        
+        apt-get install -y nodejs >/dev/null 2>&1
+        
+        # Verify installation
+        if command -v node &> /dev/null; then
+            local installed_version=$(node -v | cut -d'v' -f2 | cut -d'.' -f1)
+            log_info "Node.js installed successfully: $(node -v)"
+            log_info "npm version: $(npm -v)"
+            
+            if [ "$installed_version" -lt "$required_version" ]; then
+                log_warn "Installed version is v$installed_version (required: v${required_version}+)"
+                log_warn "Continuing anyway - build may fail if incompatible"
+            fi
+        else
+            log_error "Node.js installation failed"
+            exit 1
+        fi
     else
-        log_info "Node.js version: $(node -v)"
+        log_error "Cannot install Node.js automatically (apt-get not found)."
+        log_error "Please install Node.js v${required_version}+ manually:"
+        log_error "  curl -fsSL https://deb.nodesource.com/setup_current.x | bash -"
+        log_error "  apt-get install -y nodejs"
+        exit 1
     fi
     
     # Check npm
     if ! command -v npm &> /dev/null; then
-        log_error "npm not found. Please install Node.js properly."
+        log_error "npm not found after Node.js installation"
         exit 1
-    else
-        log_info "npm version: $(npm -v)"
     fi
     
     return 0
