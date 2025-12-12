@@ -36,7 +36,7 @@ services:
       - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
       
       # Logging
-      - "--log.level=INFO"
+      - "--log.level=DEBUG"
       - "--accesslog=true"
     
     volumes:
