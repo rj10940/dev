@@ -44,11 +44,6 @@ on:
         default: 'master'
         type: string
       
-      gh_npm_token:
-        description: 'GitHub NPM token for private packages (optional but recommended)'
-        required: false
-        type: string
-      
       auto_destroy_days:
         description: 'Auto-destroy after (days)'
         required: true
@@ -142,7 +137,7 @@ jobs:
       - name: 🚀 Execute deployment on VPS
         id: deploy
         env:
-          GH_NPM_TOKEN: ${{ inputs.gh_npm_token || secrets.GH_NPM_TOKEN }}
+          GH_NPM_TOKEN: ${{ secrets.GH_NPM_TOKEN }}
         run: |
           ssh ${{ secrets.DO_VPS_USER }}@${{ secrets.DO_VPS_HOST }} << 'ENDSSH'
             set -e
@@ -152,7 +147,7 @@ jobs:
             chmod +x scripts/*.sh
             
             # Export token for deployment script
-            export GITHUB_NPM_TOKEN="${{ inputs.gh_npm_token || secrets.GH_NPM_TOKEN }}"
+            export GITHUB_NPM_TOKEN="${{ secrets.GH_NPM_TOKEN }}"
             
             # Run deployment with all branch parameters
             ./scripts/deploy-frontend.sh deploy \
