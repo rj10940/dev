@@ -9,16 +9,16 @@ echo "=========================================="
 
 # Configure SSH for GitHub
 echo "🔑 Configuring SSH for GitHub access..."
-mkdir -p /root/.ssh
-chmod 700 /root/.ssh
+# Note: /root/.ssh is mounted from host, so we skip chmod (read-only mount)
+# The host should have proper permissions already (700 for .ssh, 600 for keys)
 
-# Ensure proper permissions on SSH keys
-if [ -f /root/.ssh/id_rsa ]; then
-    chmod 600 /root/.ssh/id_rsa
+# Verify SSH keys exist
+if [ ! -f /root/.ssh/id_rsa ] && [ ! -f /root/.ssh/id_ed25519 ]; then
+    echo "  ⚠️  WARNING: No SSH keys found in /root/.ssh"
+    echo "  Please ensure SSH keys are set up on the host at /root/.ssh/"
+    exit 1
 fi
-if [ -f /root/.ssh/id_ed25519 ]; then
-    chmod 600 /root/.ssh/id_ed25519
-fi
+echo "  ✓ SSH keys found"
 
 # Add GitHub to known_hosts if not already present
 if ! grep -q "github.com" /root/.ssh/known_hosts 2>/dev/null; then
