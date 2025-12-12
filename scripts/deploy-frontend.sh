@@ -380,29 +380,47 @@ install_dependencies() {
     bash "${SCRIPT_DIR}/install-deps-ubuntu.sh" master
 }
 
-# Update .env file with correct API URLs
+# Update .env files with correct API URLs for all packages
 update_env_file() {
     local deployment_name=$1
     local repo_dir="${REPOS_DIR}/platformui-frontend"
-    local container_dir="${repo_dir}/packages/container"
     
-    log_info "Updating environment configuration..."
+    log_info "Updating environment configuration for all packages..."
     
-    # Create custom .env.development file
-    cat > "${container_dir}/.env.development" <<EOF
-REACT_APP_TYPE='dev'
-REACT_APP_BASE_URL_MEMBER=${API_V1_URL}
-REACT_APP_AUTH_URL_JWT=${API_V2_URL}
-REACT_APP_ANGULAR_APP_URL=${CONSOLE_URL}
-REACT_APP_COOKIE_CONST=cloudways.services
-REACT_APP_INTERCOM_APP_ID=dp2f6zfx
-REACT_APP_VIRALLOOP_APP_ID=yw44WOh_o0kHDruR990qPc5LVF8
-PUBLIC_URL=/
-BUILD_PATH=./dist
-REACT_APP_GCE_PLACES_API=AIzaSyAy1fZSYBMFNmAJPO5MpbgWBaNi5SkxFn8
-EOF
+    # Define packages that need env updates
+    local packages=(
+        "container"
+        "flexible"
+        "fmp-ux3"
+        "unified-design-system"
+        "agencyos-ux3"
+        "guests-app-ux3"
+    )
     
-    log_info "Environment configured to use: $API_BASE_URL"
+    # Update each package's .env.development file
+    for package in "${packages[@]}"; do
+        local package_dir="${repo_dir}/packages/${package}"
+        local env_file="${package_dir}/.env.development"
+        
+        if [ -f "$env_file" ]; then
+            log_info "  → Updating $package/.env.development..."
+            
+            # Replace API URLs to point to our dev environment
+            # Using sed to replace URLs in-place
+            sed -i \
+                -e 's|https://api4-staging\.cloudways\.com|https://api-rj8-dev.cloudways.services|g' \
+                -e 's|https://newconsole4-staging\.cloudways\.com|https://rj8-dev-ux.cloudways.services|g' \
+                -e 's|https://newconsole3-staging\.cloudways\.com|https://rj8-dev-ux.cloudways.services|g' \
+                -e 's|cloudways\.com|cloudways.services|g' \
+                "$env_file"
+            
+            log_info "     ✓ Updated $package/.env.development"
+        else
+            log_warn "     ! No .env.development found for $package"
+        fi
+    done
+    
+    log_info "Environment configured to use: ${API_BASE_URL}"
 }
 
 # Start frontend development servers
