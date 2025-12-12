@@ -11,7 +11,7 @@ PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 DEPLOYMENTS_DIR="${PROJECT_ROOT}/deployments"
 REPOS_DIR="${PROJECT_ROOT}/repos"
 REGISTRY_DB="${DEPLOYMENTS_DIR}/registry.db"
-DOMAIN="ods.rahuljoshi.info"
+DOMAIN="rahuljoshi.info"
 MAX_DEPLOYMENTS_TOTAL=50
 MAX_DEPLOYMENTS_PER_USER=3
 
