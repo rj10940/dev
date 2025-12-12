@@ -40,7 +40,7 @@ This allows npm to install private packages from `@cloudways-lab` organization.
 
 1. Go to repository → **Settings** → **Secrets and variables** → **Actions**
 2. Click **"New repository secret"**
-3. Name: `GITHUB_NPM_TOKEN`
+3. Name: `GH_NPM_TOKEN` (⚠️ Cannot start with `GITHUB_`)
 4. Value: `ghp_FHvKb...` (your token)
 5. Click **"Add secret"**
 
@@ -55,7 +55,7 @@ When running workflow:
 Deployment name: rahul-test
 platformui-frontend: master
 ...
-github_npm_token: ghp_YOUR_TOKEN_HERE
+gh_npm_token: ghp_YOUR_TOKEN_HERE
 ```
 
 ---
