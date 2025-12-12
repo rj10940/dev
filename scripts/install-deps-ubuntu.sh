@@ -1,8 +1,9 @@
 #!/bin/bash
 # Modified version of node_modules.sh for Ubuntu (sequential cloning)
-# Based on: /home/rahuljoshi/CW/platformui-frontend/node_modules.sh
+# NO BACKGROUND PROCESSES - Everything runs sequentially and visibly
 
-set -e
+# Don't exit on error - we want to see what happens
+set +e
 
 INSTALL_CMD="npm i"
 TARGET_BRANCH="${1:-master}"
@@ -28,6 +29,7 @@ PACKAGES=(
 # Track success/failure
 SUCCESS_COUNT=0
 FAILED_PACKAGES=()
+SKIPPED_PACKAGES=()
 
 # Function to install a single package
 install_package() {
@@ -40,29 +42,33 @@ install_package() {
     echo "============================================================"
     echo ""
     
+    # Check if directory exists
     if [ ! -d "$package_dir" ]; then
         echo "⚠️  Directory not found: $package_dir"
         echo "   Skipping $package_name (submodule may not be initialized)"
-        return 1
+        return 2  # Return 2 for "skipped"
     fi
     
-    cd "$package_dir"
+    cd "$package_dir" || return 1
     
     # Check if package.json exists
     if [ ! -f "package.json" ]; then
         echo "⚠️  No package.json found in $package_name"
         echo "   Skipping..."
         cd "$CURRENT_DIR"
-        return 1
+        return 2  # Return 2 for "skipped"
     fi
     
-    # Git operations (continue even if they fail)
+    echo "✓ Found package.json"
+    
+    # Git operations (non-critical, continue on failure)
+    echo ""
     echo "→ Git operations..."
-    git stash 2>&1 || echo "  No local changes to stash"
-    git fetch origin 2>&1 || echo "  Fetch failed or not needed"
-    git checkout "$TARGET_BRANCH" 2>&1 || echo "  Already on $TARGET_BRANCH"
-    git pull origin "$TARGET_BRANCH" 2>&1 || echo "  Pull completed/skipped"
-    git stash pop 2>&1 || echo "  No stash to pop"
+    git stash 2>&1 || echo "  (No stash needed)"
+    git fetch origin 2>&1 || echo "  (Fetch skipped)"
+    git checkout "$TARGET_BRANCH" 2>&1 || echo "  (Already on branch)"
+    git pull origin "$TARGET_BRANCH" 2>&1 || echo "  (Pull skipped)"
+    git stash pop 2>&1 || echo "  (No stash to pop)"
     
     # Remove node_modules
     echo ""
@@ -71,12 +77,22 @@ install_package() {
     
     # Install dependencies
     echo ""
-    echo "→ Running npm install..."
-    if $INSTALL_CMD; then
-        echo ""
-        echo "✅ Installation completed for $package_name"
-        cd "$CURRENT_DIR"
-        return 0
+    echo "→ Running npm install for $package_name..."
+    echo "  (This may take a few minutes...)"
+    
+    if $INSTALL_CMD 2>&1; then
+        local install_exit=$?
+        if [ $install_exit -eq 0 ]; then
+            echo ""
+            echo "✅ Installation completed for $package_name"
+            cd "$CURRENT_DIR"
+            return 0
+        else
+            echo ""
+            echo "❌ npm install failed with exit code $install_exit for $package_name"
+            cd "$CURRENT_DIR"
+            return 1
+        fi
     else
         echo ""
         echo "❌ Installation failed for $package_name"
@@ -85,16 +101,30 @@ install_package() {
     fi
 }
 
+echo ""
+echo "🚀 Starting sequential installation..."
+echo ""
+
 # Install each package sequentially
 for package in "${PACKAGES[@]}"; do
     package_name=$(basename "$package")
     package_dir="$CURRENT_DIR/$package"
     
-    if install_package "$package_dir"; then
+    install_package "$package_dir"
+    result=$?
+    
+    if [ $result -eq 0 ]; then
         ((SUCCESS_COUNT++))
+        echo "✅ $package_name: SUCCESS"
+    elif [ $result -eq 2 ]; then
+        SKIPPED_PACKAGES+=("$package_name")
+        echo "⚠️  $package_name: SKIPPED"
     else
         FAILED_PACKAGES+=("$package_name")
+        echo "❌ $package_name: FAILED"
     fi
+    
+    echo ""
 done
 
 echo ""
@@ -104,8 +134,16 @@ echo "============================================================"
 echo ""
 echo "Total packages: ${#PACKAGES[@]}"
 echo "✅ Successful: $SUCCESS_COUNT"
-echo "⚠️  Skipped: $((${#PACKAGES[@]} - $SUCCESS_COUNT - ${#FAILED_PACKAGES[@]}))"
+echo "⚠️  Skipped: ${#SKIPPED_PACKAGES[@]}"
 echo "❌ Failed: ${#FAILED_PACKAGES[@]}"
+
+if [ ${#SKIPPED_PACKAGES[@]} -gt 0 ]; then
+    echo ""
+    echo "Skipped packages:"
+    for pkg in "${SKIPPED_PACKAGES[@]}"; do
+        echo "  • $pkg"
+    done
+fi
 
 if [ ${#FAILED_PACKAGES[@]} -gt 0 ]; then
     echo ""
@@ -113,18 +151,25 @@ if [ ${#FAILED_PACKAGES[@]} -gt 0 ]; then
     for pkg in "${FAILED_PACKAGES[@]}"; do
         echo "  • $pkg"
     done
-    echo ""
-    echo "⚠️  Some packages failed, but continuing deployment..."
-    echo "   (Container package installed successfully)"
-fi
-
-if [ $SUCCESS_COUNT -eq 0 ]; then
-    echo ""
-    echo "❌ No packages installed successfully!"
-    exit 1
 fi
 
 echo ""
-echo "✅ Core installation completed!"
-exit 0
+
+# Only fail if NO packages succeeded
+if [ $SUCCESS_COUNT -eq 0 ]; then
+    echo "❌ CRITICAL: No packages installed successfully!"
+    echo "   Cannot continue deployment."
+    exit 1
+fi
+
+# Success if at least container package succeeded
+if [ $SUCCESS_COUNT -ge 1 ]; then
+    echo "✅ Core installation completed!"
+    echo "   At least $SUCCESS_COUNT package(s) installed successfully"
+    echo "   Continuing with deployment..."
+    exit 0
+fi
+
+# Fallback
+exit 1
 
