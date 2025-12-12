@@ -7,6 +7,29 @@ set -e
 echo "🚀 Setting up deployment: ${DEPLOYMENT_NAME}"
 echo "=========================================="
 
+# Configure SSH for GitHub
+echo "🔑 Configuring SSH for GitHub access..."
+mkdir -p /root/.ssh
+chmod 700 /root/.ssh
+
+# Ensure proper permissions on SSH keys
+if [ -f /root/.ssh/id_rsa ]; then
+    chmod 600 /root/.ssh/id_rsa
+fi
+if [ -f /root/.ssh/id_ed25519 ]; then
+    chmod 600 /root/.ssh/id_ed25519
+fi
+
+# Add GitHub to known_hosts if not already present
+if ! grep -q "github.com" /root/.ssh/known_hosts 2>/dev/null; then
+    echo "  → Adding GitHub to known_hosts..."
+    ssh-keyscan github.com >> /root/.ssh/known_hosts 2>/dev/null || true
+fi
+
+# Test SSH connection to GitHub
+echo "  → Testing GitHub SSH connection..."
+ssh -T git@github.com -o StrictHostKeyChecking=no 2>&1 | grep -q "successfully authenticated" && echo "  ✓ GitHub SSH access verified" || echo "  ⚠️  GitHub SSH test returned non-zero (this is often normal)"
+
 # Configure Git (for cloning)
 git config --global user.email "deploy@ods.local"
 git config --global user.name "ODS Deploy"

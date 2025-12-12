@@ -23,6 +23,10 @@ services:
       # GitHub token for private packages
       - GITHUB_NPM_TOKEN=${GITHUB_NPM_TOKEN:-}
     
+    volumes:
+      # Mount SSH keys for GitHub access
+      - /root/.ssh:/root/.ssh:ro
+    
     working_dir: /app
     
     # Run the setup and start script
