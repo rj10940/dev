@@ -543,7 +543,7 @@ register_deployment() {
 EOF
     )
     
-    sqlite3 "$REGISTRY_DB" <<EOF 2>/dev/null
+    sqlite3 "$REGISTRY_DB" <<EOF 2>/dev/null || true
 INSERT INTO deployments (name, owner, status, branch_platformui, auto_destroy_at, url, project_name)
 VALUES (
     '$name',
@@ -556,7 +556,8 @@ VALUES (
 );
 EOF
     
-    if [ $? -eq 0 ]; then
+    local db_result=$?
+    if [ $db_result -eq 0 ]; then
         log_info "Deployment registered in database"
     else
         log_warn "Could not register deployment in database (continuing anyway)"
