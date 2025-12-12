@@ -59,6 +59,43 @@ ensure_sqlite3() {
     return 0
 }
 
+# Check and install Node.js if not available
+ensure_nodejs() {
+    if ! command -v node &> /dev/null; then
+        log_warn "Node.js not found. Installing Node.js 20.x..."
+        if command -v apt-get &> /dev/null; then
+            # Install Node.js 20.x from NodeSource
+            curl -fsSL https://deb.nodesource.com/setup_20.x | bash - >/dev/null 2>&1
+            apt-get install -y nodejs >/dev/null 2>&1
+            log_info "Node.js installed successfully"
+        else
+            log_error "Cannot install Node.js automatically."
+            log_error "Please install Node.js 20+ manually:"
+            log_error "  curl -fsSL https://deb.nodesource.com/setup_20.x | bash -"
+            log_error "  apt-get install -y nodejs"
+            exit 1
+        fi
+    fi
+    
+    # Check Node.js version
+    local node_version=$(node -v | cut -d'v' -f2 | cut -d'.' -f1)
+    if [ "$node_version" -lt 18 ]; then
+        log_warn "Node.js version is $node_version, but 20+ is recommended"
+    else
+        log_info "Node.js version: $(node -v)"
+    fi
+    
+    # Check npm
+    if ! command -v npm &> /dev/null; then
+        log_error "npm not found. Please install Node.js properly."
+        exit 1
+    else
+        log_info "npm version: $(npm -v)"
+    fi
+    
+    return 0
+}
+
 # Initialize deployment registry
 init_registry() {
     mkdir -p "$DEPLOYMENTS_DIR"
