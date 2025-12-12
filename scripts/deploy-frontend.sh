@@ -610,8 +610,7 @@ EOF
     install_dependencies
     update_env_file "$deployment_name"
     start_frontend "$deployment_name"
-    create_deployment_env "$deployment_name"
-    start_containers "$deployment_name"
+    # Note: No Docker containers needed - dev servers are running directly
     register_deployment "$deployment_name" "$owner" "$frontend_branch" "$auto_destroy_days" \
         "$flexible_branch" "$fmp_branch" "$unified_branch" "$agencyos_branch" "$guests_branch"
     
@@ -619,8 +618,16 @@ EOF
     log_info "=========================================="
     log_info "✅ Deployment Complete!"
     log_info "=========================================="
-    log_info "📍 URL: https://${deployment_name}.${DOMAIN}"
+    log_info "📍 Dev Servers Running:"
+    log_info "   - Container: http://localhost:8081"
+    log_info "   - Flexible: http://localhost:8082"
+    log_info "   - FMP: http://localhost:8083"
+    log_info "   - Unified: http://localhost:8080"
+    log_info "   - AgencyOS: http://localhost:8084"
+    log_info "   - Guests: http://localhost:8085"
     log_info "🔗 API: $API_BASE_URL"
+    log_info "📋 Logs: /tmp/ods-${deployment_name}-*.log"
+    log_info "🔢 PIDs: /tmp/ods-${deployment_name}-*.pid"
     log_info "🌿 Branches:"
     log_info "   - platformui-frontend: $frontend_branch"
     log_info "   - flexible-ux3: $flexible_branch"
