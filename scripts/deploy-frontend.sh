@@ -423,15 +423,6 @@ update_env_file() {
     log_info "Environment configured to use: ${API_BASE_URL}"
 }
 
-# No build needed - we're running dev servers!
-# Just ensure dependencies are installed
-
-# Update .env files with correct API URLs
-update_env_file "$deployment_name"
-
-# Create deployment environment file
-create_deployment_env "$deployment_name"
-
 # Create deployment environment file
 create_deployment_env() {
     local deployment_name=$1
