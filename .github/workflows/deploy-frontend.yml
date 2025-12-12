@@ -44,6 +44,11 @@ on:
         default: 'master'
         type: string
       
+      github_npm_token:
+        description: 'GitHub NPM token for private packages (optional but recommended)'
+        required: false
+        type: string
+      
       auto_destroy_days:
         description: 'Auto-destroy after (days)'
         required: true
@@ -136,6 +141,8 @@ jobs:
       
       - name: 🚀 Execute deployment on VPS
         id: deploy
+        env:
+          GITHUB_NPM_TOKEN: ${{ inputs.github_npm_token || secrets.GITHUB_NPM_TOKEN }}
         run: |
           ssh ${{ secrets.DO_VPS_USER }}@${{ secrets.DO_VPS_HOST }} << 'ENDSSH'
             set -e
@@ -144,8 +151,8 @@ jobs:
             # Make scripts executable
             chmod +x scripts/*.sh
             
-            # Export GitHub token for repository access
-            export GITHUB_TOKEN="${{ secrets.GITHUB_TOKEN }}"
+            # Export token for deployment script
+            export GITHUB_NPM_TOKEN="${{ inputs.github_npm_token || secrets.GITHUB_NPM_TOKEN }}"
             
             # Run deployment with all branch parameters
             ./scripts/deploy-frontend.sh deploy \
@@ -157,8 +164,7 @@ jobs:
               "${{ inputs.fmp_branch }}" \
               "${{ inputs.unified_branch }}" \
               "${{ inputs.agencyos_branch }}" \
-              "${{ inputs.guests_branch }}" \
-              "${{ secrets.GITHUB_TOKEN }}"
+              "${{ inputs.guests_branch }}"
           ENDSSH
       
       - name: ✅ Verify deployment

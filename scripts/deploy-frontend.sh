@@ -20,6 +20,9 @@ API_V1_URL="${API_BASE_URL}/api/v1/"
 API_V2_URL="${API_BASE_URL}/api/v2/"
 CONSOLE_URL="${API_BASE_URL}/"
 
+# GitHub Token for private packages (will be set from environment or parameter)
+GITHUB_NPM_TOKEN="${GITHUB_NPM_TOKEN:-}"
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -224,8 +227,7 @@ check_exists() {
 # Clone/update platformui-frontend repository
 prepare_frontend_repo() {
     local branch=$1
-    local github_token=${GITHUB_TOKEN:-}
-    
+    local repo_url="git@github.com:cloudways-lab/platformui-frontend.git"
     local repo_dir="${REPOS_DIR}/platformui-frontend"
     
     mkdir -p "$REPOS_DIR"
@@ -233,17 +235,6 @@ prepare_frontend_repo() {
     if [ ! -d "$repo_dir" ]; then
         log_info "Cloning platformui-frontend repository..."
         cd "$REPOS_DIR"
-        
-        if [ -n "$github_token" ]; then
-            # Use HTTPS with token
-            local repo_url="https://${github_token}@github.com/cloudways-lab/platformui-frontend.git"
-            log_info "Using HTTPS with authentication token"
-        else
-            # Try SSH (fallback)
-            local repo_url="git@github.com:cloudways-lab/platformui-frontend.git"
-            log_info "Using SSH authentication"
-        fi
-        
         git clone "$repo_url"
         cd "$repo_dir"
     else
@@ -255,14 +246,6 @@ prepare_frontend_repo() {
     log_info "Checking out branch: $branch"
     git checkout "$branch"
     git pull origin "$branch"
-    
-    # Configure git to use token for submodules if token provided
-    if [ -n "$github_token" ]; then
-        log_info "Configuring git credential helper for submodules..."
-        git config credential.helper store
-        echo "https://${github_token}:@github.com" > ~/.git-credentials
-        chmod 600 ~/.git-credentials
-    fi
     
     log_info "Repository prepared at: $repo_dir"
 }
@@ -280,25 +263,14 @@ update_submodules() {
     log_info "Initializing git submodules..."
     cd "$repo_dir"
     
-    # Configure git to use HTTPS for submodules (convert SSH to HTTPS)
-    if [ -n "${GITHUB_TOKEN:-}" ]; then
-        log_info "Configuring submodule URLs to use HTTPS with token..."
-        
-        # Update .gitmodules to use HTTPS instead of SSH
-        sed -i 's|git@github.com:|https://github.com/|g' .gitmodules
-        git submodule sync
-    fi
-    
     # Initialize and clone submodules
     log_info "Running git submodule update --init --recursive..."
-    log_info "(This will clone all submodule repositories - may take a few minutes)"
+    git submodule update --init --recursive
     
-    if git submodule update --init --recursive; then
-        log_info "✅ Submodules cloned successfully"
-    else
-        log_error "Failed to clone submodules"
-        exit 1
-    fi
+    log_info "Submodules initialized and cloned"
+    
+    # Setup npm authentication for private packages
+    setup_npm_auth
     
     # Update submodules to specified branches
     log_info "Updating submodules to specified branches..."
@@ -345,6 +317,56 @@ update_submodules() {
     done
     
     log_info "Submodules updated successfully"
+}
+
+# Setup npm authentication for private packages
+setup_npm_auth() {
+    local repo_dir="${REPOS_DIR}/platformui-frontend"
+    
+    if [ -z "$GITHUB_NPM_TOKEN" ]; then
+        log_warn "No GitHub NPM token provided - private packages may fail to install"
+        log_info "Set GITHUB_NPM_TOKEN environment variable to authenticate"
+        return 0
+    fi
+    
+    log_info "Setting up npm authentication for private packages..."
+    cd "$repo_dir"
+    
+    # Define micro frontend directories
+    local microfrontend_dirs=(
+        "packages/agencyos-ux3"
+        "packages/container"
+        "packages/flexible"
+        "packages/fmp-ux3"
+        "packages/guests-app-ux3"
+        "packages/unified-design-system"
+    )
+    
+    # Create .npmrc for each micro frontend
+    for dir in "${microfrontend_dirs[@]}"; do
+        if [ -d "$dir" ]; then
+            log_info "  → Configuring $dir..."
+            
+            # Create .npmrc file
+            cat > "$dir/.npmrc" <<EOF
+//npm.pkg.github.com/:_authToken=${GITHUB_NPM_TOKEN}
+@cloudways-lab:registry=https://npm.pkg.github.com/
+EOF
+            
+            # Update .gitignore to protect token
+            if [ -f "$dir/.gitignore" ]; then
+                if ! grep -q "^\.npmrc$" "$dir/.gitignore" 2>/dev/null; then
+                    echo ".npmrc" >> "$dir/.gitignore"
+                fi
+            else
+                echo ".npmrc" > "$dir/.gitignore"
+            fi
+            
+            log_info "     ✓ $dir configured"
+        fi
+    done
+    
+    log_info "npm authentication configured successfully"
 }
 
 # Install dependencies
@@ -496,7 +518,6 @@ deploy() {
     local unified_branch=${7:-master}
     local agencyos_branch=${8:-master}
     local guests_branch=${9:-master}
-    local github_token=${10:-${GITHUB_TOKEN:-}}
     
     log_info "=========================================="
     log_info "Starting Frontend Deployment"
@@ -510,11 +531,6 @@ deploy() {
     log_info "  - unified-design-system: $unified_branch"
     log_info "  - agencyos-ux3: $agencyos_branch"
     log_info "  - guests-app-ux3: $guests_branch"
-    if [ -n "$github_token" ]; then
-        log_info "  - Authentication: GitHub Token ✓"
-    else
-        log_info "  - Authentication: SSH"
-    fi
     log_info ""
     
     # Validations
