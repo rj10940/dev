@@ -32,7 +32,7 @@ export DOMAIN="ods.rahuljoshi.info"
 # Start Traefik
 echo "→ Starting Traefik..."
 cd "$PROJECT_ROOT"
-docker-compose -f docker-compose.traefik.yml up -d
+docker compose -f docker-compose.traefik.yml up -d
 
 echo ""
 echo "============================================================"
