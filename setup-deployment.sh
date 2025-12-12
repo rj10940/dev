@@ -90,31 +90,46 @@ done
 
 # Install dependencies
 echo "📦 Installing dependencies..."
-echo "  This may take 2-3 minutes..."
+echo "  This may take 5-10 minutes for all packages..."
+echo ""
 
 install_package() {
     local package=$1
     local name=$2
     
     if [ -d "$package" ] && [ -f "$package/package.json" ]; then
-        echo "  → Installing $name..."
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo "→ Installing $name..."
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
         cd "/app/$package"
-        npm install --legacy-peer-deps > "/tmp/install-${name}.log" 2>&1
-        if [ $? -eq 0 ]; then
-            echo "    ✓ $name installed"
+        
+        # Run npm install with visible output (but filter noise)
+        npm install --legacy-peer-deps 2>&1 | grep -E "(added|removed|changed|audited|up to date|warn|ERR!)" || true
+        
+        if [ ${PIPESTATUS[0]} -eq 0 ] && [ -d "node_modules" ]; then
+            echo "✅ $name installed successfully"
         else
-            echo "    ⚠️  $name failed (check /tmp/install-${name}.log)"
+            echo "⚠️  $name installation had issues"
         fi
+        echo ""
+    else
+        echo "⚠️  Skipping $name - package.json not found"
+        echo ""
     fi
 }
 
 # Install in order (unified first, then others)
+# Unified MUST be first as others depend on it
 install_package "packages/unified-design-system" "unified"
 install_package "packages/container" "container"
 install_package "packages/flexible" "flexible"
 install_package "packages/fmp-ux3" "fmp"
 install_package "packages/agencyos-ux3" "agencyos"
 install_package "packages/guests-app-ux3" "guests"
+
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "✅ All installations complete!"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
 cd /app
 
@@ -130,5 +145,8 @@ echo "  - fmp: ${FMP_BRANCH}"
 echo "  - unified: ${UNIFIED_BRANCH}"
 echo "  - agencyos: ${AGENCYOS_BRANCH}"
 echo "  - guests: ${GUESTS_BRANCH}"
+echo ""
+echo "⏳ Waiting 5 seconds before starting dev servers..."
+sleep 5
 echo ""
 
