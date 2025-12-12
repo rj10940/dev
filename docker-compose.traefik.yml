@@ -49,7 +49,7 @@ services:
     labels:
       - "traefik.enable=true"
       # Dashboard
-      - "traefik.http.routers.dashboard.rule=Host(`traefik.${DOMAIN:-ods.rahuljoshi.info}`)"
+      - "traefik.http.routers.dashboard.rule=Host(`traefik.${DOMAIN:-rahuljoshi.info}`)"
       - "traefik.http.routers.dashboard.entrypoints=websecure"
       - "traefik.http.routers.dashboard.tls.certresolver=letsencrypt"
       - "traefik.http.routers.dashboard.service=api@internal"

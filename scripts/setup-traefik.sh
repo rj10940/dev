@@ -27,7 +27,7 @@ docker network create traefik-public 2>/dev/null || echo "  Network already exis
 
 # Set domain in environment
 echo "→ Setting up environment..."
-export DOMAIN="ods.rahuljoshi.info"
+export DOMAIN="rahuljoshi.info"
 
 # Start Traefik
 echo "→ Starting Traefik..."
