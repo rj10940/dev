@@ -143,6 +143,12 @@ prepare_frontend_repo() {
 
 # Initialize and update git submodules
 update_submodules() {
+    local flexible_branch=${1:-master}
+    local fmp_branch=${2:-master}
+    local unified_branch=${3:-master}
+    local agencyos_branch=${4:-master}
+    local guests_branch=${5:-master}
+    
     local repo_dir="${REPOS_DIR}/platformui-frontend"
     
     log_info "Initializing git submodules..."
@@ -151,31 +157,44 @@ update_submodules() {
     # Initialize submodules if not already done
     git submodule init
     
-    # Update submodules to their master/main branches
-    log_info "Updating submodules sequentially..."
+    # Update submodules to specified branches
+    log_info "Updating submodules to specified branches..."
     
-    local submodules=(
-        "packages/flexible"
-        "packages/fmp-ux3"
-        "packages/unified-design-system"
-        "packages/guests-app-ux3"
-        "packages/agencyos-ux3"
+    # Define submodules and their branches
+    declare -A submodule_branches=(
+        ["packages/flexible"]="$flexible_branch"
+        ["packages/fmp-ux3"]="$fmp_branch"
+        ["packages/unified-design-system"]="$unified_branch"
+        ["packages/agencyos-ux3"]="$agencyos_branch"
+        ["packages/guests-app-ux3"]="$guests_branch"
     )
     
-    for submodule in "${submodules[@]}"; do
+    for submodule in "${!submodule_branches[@]}"; do
+        local branch="${submodule_branches[$submodule]}"
+        
         if [ -d "$submodule" ]; then
-            log_info "  → Updating $submodule..."
+            log_info "  → Updating $submodule to branch: $branch..."
             cd "$repo_dir/$submodule"
             
-            # Try master first, then main
-            if git rev-parse --verify origin/master &>/dev/null; then
-                git checkout master
-                git pull origin master
-            elif git rev-parse --verify origin/main &>/dev/null; then
-                git checkout main
-                git pull origin main
+            # Fetch all branches
+            git fetch origin
+            
+            # Checkout specified branch
+            if git rev-parse --verify "origin/$branch" &>/dev/null; then
+                git checkout "$branch"
+                git pull origin "$branch"
+                log_info "     ✓ $submodule: $branch"
             else
-                log_warn "  ! Could not determine default branch for $submodule"
+                log_warn "     ! Branch '$branch' not found for $submodule, trying master/main..."
+                if git rev-parse --verify origin/master &>/dev/null; then
+                    git checkout master
+                    git pull origin master
+                elif git rev-parse --verify origin/main &>/dev/null; then
+                    git checkout main
+                    git pull origin main
+                else
+                    log_error "     ! Could not find suitable branch for $submodule"
+                fi
             fi
             
             cd "$repo_dir"
@@ -271,13 +290,31 @@ start_containers() {
 register_deployment() {
     local name=$1
     local owner=$2
-    local branch=$3
-    local auto_destroy_days=${4:-7}
+    local frontend_branch=$3
+    local auto_destroy_days=$4
+    local flexible_branch=${5:-master}
+    local fmp_branch=${6:-master}
+    local unified_branch=${7:-master}
+    local agencyos_branch=${8:-master}
+    local guests_branch=${9:-master}
     
     local auto_destroy_at=""
     if [ "$auto_destroy_days" != "never" ]; then
         auto_destroy_at=$(date -d "+${auto_destroy_days} days" '+%Y-%m-%d %H:%M:%S')
     fi
+    
+    # Create JSON of all branches
+    local branches_json=$(cat <<EOF
+{
+  "platformui_frontend": "$frontend_branch",
+  "flexible_ux3": "$flexible_branch",
+  "fmp_ux3": "$fmp_branch",
+  "unified_design_system": "$unified_branch",
+  "agencyos_ux3": "$agencyos_branch",
+  "guests_app_ux3": "$guests_branch"
+}
+EOF
+    )
     
     sqlite3 "$REGISTRY_DB" <<EOF
 INSERT INTO deployments (name, owner, status, branch_platformui, auto_destroy_at, url, project_name)
@@ -285,7 +322,7 @@ VALUES (
     '$name',
     '$owner',
     'active',
-    '$branch',
+    '$(echo "$branches_json" | tr -d '\n')',
     '$auto_destroy_at',
     'https://${name}.${DOMAIN}',
     '${name}-ods'
@@ -298,16 +335,27 @@ EOF
 # Main deployment function
 deploy() {
     local deployment_name=$1
-    local branch=${2:-master}
+    local frontend_branch=${2:-master}
     local owner=${3:-$(whoami)}
     local auto_destroy_days=${4:-7}
+    local flexible_branch=${5:-master}
+    local fmp_branch=${6:-master}
+    local unified_branch=${7:-master}
+    local agencyos_branch=${8:-master}
+    local guests_branch=${9:-master}
     
     log_info "=========================================="
     log_info "Starting Frontend Deployment"
     log_info "=========================================="
     log_info "Deployment: $deployment_name"
-    log_info "Branch: $branch"
     log_info "Owner: $owner"
+    log_info "Branches:"
+    log_info "  - platformui-frontend: $frontend_branch"
+    log_info "  - flexible-ux3: $flexible_branch"
+    log_info "  - fmp-ux3: $fmp_branch"
+    log_info "  - unified-design-system: $unified_branch"
+    log_info "  - agencyos-ux3: $agencyos_branch"
+    log_info "  - guests-app-ux3: $guests_branch"
     log_info ""
     
     # Validations
@@ -323,14 +371,15 @@ VALUES ('$deployment_name', '$owner', 'creating', '$branch');
 EOF
     
     # Deployment steps
-    prepare_frontend_repo "$branch"
-    update_submodules
+    prepare_frontend_repo "$frontend_branch"
+    update_submodules "$flexible_branch" "$fmp_branch" "$unified_branch" "$agencyos_branch" "$guests_branch"
     install_dependencies
     update_env_file "$deployment_name"
     build_frontend "$deployment_name"
     create_deployment_env "$deployment_name"
     start_containers "$deployment_name"
-    register_deployment "$deployment_name" "$owner" "$branch" "$auto_destroy_days"
+    register_deployment "$deployment_name" "$owner" "$frontend_branch" "$auto_destroy_days" \
+        "$flexible_branch" "$fmp_branch" "$unified_branch" "$agencyos_branch" "$guests_branch"
     
     log_info ""
     log_info "=========================================="
@@ -338,6 +387,13 @@ EOF
     log_info "=========================================="
     log_info "📍 URL: https://${deployment_name}.${DOMAIN}"
     log_info "🔗 API: $API_BASE_URL"
+    log_info "🌿 Branches:"
+    log_info "   - platformui-frontend: $frontend_branch"
+    log_info "   - flexible-ux3: $flexible_branch"
+    log_info "   - fmp-ux3: $fmp_branch"
+    log_info "   - unified-design-system: $unified_branch"
+    log_info "   - agencyos-ux3: $agencyos_branch"
+    log_info "   - guests-app-ux3: $guests_branch"
     log_info "⏰ Auto-destroy: ${auto_destroy_days} days"
     log_info ""
 }
@@ -378,10 +434,10 @@ list_deployments() {
 case "${1:-}" in
     deploy)
         if [ -z "$2" ] || [ -z "$3" ]; then
-            echo "Usage: $0 deploy <deployment-name> <branch-name> [owner] [auto-destroy-days]"
+            echo "Usage: $0 deploy <deployment-name> <frontend-branch> [owner] [auto-destroy-days] [flexible-branch] [fmp-branch] [unified-branch] [agencyos-branch] [guests-branch]"
             exit 1
         fi
-        deploy "$2" "$3" "${4:-$(whoami)}" "${5:-7}"
+        deploy "$2" "$3" "${4:-$(whoami)}" "${5:-7}" "${6:-master}" "${7:-master}" "${8:-master}" "${9:-master}" "${10:-master}"
         ;;
     destroy)
         if [ -z "$2" ]; then
@@ -397,12 +453,16 @@ case "${1:-}" in
         echo "Usage: $0 {deploy|destroy|list}"
         echo ""
         echo "Commands:"
-        echo "  deploy <name> <branch> [owner] [days]  - Deploy frontend with specified branch"
-        echo "  destroy <name>                          - Destroy a deployment"
-        echo "  list                                    - List all active deployments"
+        echo "  deploy <name> <frontend-branch> [owner] [days] [flexible] [fmp] [unified] [agencyos] [guests]"
+        echo "      - Deploy frontend with specified branches for all submodules"
+        echo "  destroy <name>"
+        echo "      - Destroy a deployment"
+        echo "  list"
+        echo "      - List all active deployments"
         echo ""
         echo "Example:"
-        echo "  $0 deploy rahul-feature-123 feature/new-dashboard rahul 7"
+        echo "  $0 deploy rahul-feature-123 feature/new-dashboard rahul 7 master master master master master"
+        echo "  $0 deploy rahul-test master rahul 7 feature/ui-update master main develop master"
         exit 1
         ;;
 esac

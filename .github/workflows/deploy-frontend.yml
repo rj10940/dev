@@ -14,6 +14,36 @@ on:
         default: 'master'
         type: string
       
+      flexible_branch:
+        description: 'flexible-ux3 branch name'
+        required: true
+        default: 'master'
+        type: string
+      
+      fmp_branch:
+        description: 'fmp-ux3 branch name'
+        required: true
+        default: 'master'
+        type: string
+      
+      unified_branch:
+        description: 'unified-design-system branch name'
+        required: true
+        default: 'master'
+        type: string
+      
+      agencyos_branch:
+        description: 'agencyos-ux3 branch name'
+        required: true
+        default: 'master'
+        type: string
+      
+      guests_branch:
+        description: 'guests-app-ux3 branch name'
+        required: true
+        default: 'master'
+        type: string
+      
       auto_destroy_days:
         description: 'Auto-destroy after (days)'
         required: true
@@ -58,11 +88,18 @@ jobs:
           echo "## 🚀 Deployment Configuration" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Deployment Name:** \`${{ inputs.deployment_name }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "**Branch:** \`${{ inputs.frontend_branch }}\`" >> $GITHUB_STEP_SUMMARY
           echo "**Owner:** \`${{ github.actor }}\`" >> $GITHUB_STEP_SUMMARY
           echo "**Auto-destroy:** ${{ inputs.auto_destroy_days }} days" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Expected URL:** \`https://${{ inputs.deployment_name }}.dev.cloudways.com\`" >> $GITHUB_STEP_SUMMARY
+          echo "### 📦 Branches" >> $GITHUB_STEP_SUMMARY
+          echo "- **platformui-frontend:** \`${{ inputs.frontend_branch }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **flexible-ux3:** \`${{ inputs.flexible_branch }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **fmp-ux3:** \`${{ inputs.fmp_branch }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **unified-design-system:** \`${{ inputs.unified_branch }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **agencyos-ux3:** \`${{ inputs.agencyos_branch }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **guests-app-ux3:** \`${{ inputs.guests_branch }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Expected URL:** \`https://${{ inputs.deployment_name }}.ods.rahuljoshi.info\`" >> $GITHUB_STEP_SUMMARY
 
   deploy:
     name: Deploy Frontend
@@ -89,7 +126,7 @@ jobs:
       - name: 📦 Prepare deployment
         id: prepare
         run: |
-          echo "deployment_url=https://${{ inputs.deployment_name }}.dev.cloudways.com" >> $GITHUB_OUTPUT
+          echo "deployment_url=https://${{ inputs.deployment_name }}.ods.rahuljoshi.info" >> $GITHUB_OUTPUT
           echo "timestamp=$(date '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_OUTPUT
       
       - name: 📤 Copy deployment scripts to VPS
@@ -107,12 +144,17 @@ jobs:
             # Make scripts executable
             chmod +x scripts/*.sh
             
-            # Run deployment
+            # Run deployment with all branch parameters
             ./scripts/deploy-frontend.sh deploy \
               "${{ inputs.deployment_name }}" \
               "${{ inputs.frontend_branch }}" \
               "${{ github.actor }}" \
-              "${{ inputs.auto_destroy_days }}"
+              "${{ inputs.auto_destroy_days }}" \
+              "${{ inputs.flexible_branch }}" \
+              "${{ inputs.fmp_branch }}" \
+              "${{ inputs.unified_branch }}" \
+              "${{ inputs.agencyos_branch }}" \
+              "${{ inputs.guests_branch }}"
           ENDSSH
       
       - name: ✅ Verify deployment
@@ -122,7 +164,7 @@ jobs:
           
           # Check if URL is accessible (with retries)
           for i in {1..10}; do
-            if curl -f -s -o /dev/null -w "%{http_code}" "https://${{ inputs.deployment_name }}.dev.cloudways.com" | grep -q "200\|301\|302"; then
+            if curl -f -s -o /dev/null -w "%{http_code}" "https://${{ inputs.deployment_name }}.ods.rahuljoshi.info" | grep -q "200\|301\|302"; then
               echo "✅ Deployment is accessible!"
               break
             fi
